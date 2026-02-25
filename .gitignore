@@ -1,7 +1,11 @@
 # compiled output
-/dist
-/node_modules
-/build
+backend/dist
+backend/node_modules
+backend/build
+
+frontend/dist
+frontend/node_modules
+frontend/build
 
 # Logs
 logs
@@ -54,3 +58,7 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+backend/.pnp.cjs
+backend/.yarn/install-state.gz
+backend/src/main.ts
