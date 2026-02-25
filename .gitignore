@@ -59,6 +59,26 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
+# Cache directories
+.eslintcache
+.cache
+.parcel-cache
+.turbo
+.turbopack
+
+# Yarn
 backend/.pnp.cjs
 backend/.yarn/install-state.gz
-backend/src/main.ts
+
+# Build artifacts
+*.tgz
+npm-shrinkwrap.json
+
+# Editor backup files
+*.swp
+*.swo
+*.bak
+
+# Next.js specific
+frontend/.next
+frontend/out
