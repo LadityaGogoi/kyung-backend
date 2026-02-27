@@ -28,8 +28,26 @@
 ## Project setup
 
 ```bash
-$ npm install
+$ yarn install
 ```
+
+### Database (Prisma + PostgreSQL with Docker)
+
+1. Copy env and start Postgres:
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+2. Run migrations and generate Prisma client:
+
+```bash
+yarn prisma migrate dev --name init
+yarn prisma generate
+```
+
+Use `yarn prisma studio` to open the database GUI.
 
 ## Compile and run the project
 

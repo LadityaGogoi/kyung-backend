@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# npm lockfile (project uses yarn)
+package-lock.json
+
 # Logs
 logs
 *.log
