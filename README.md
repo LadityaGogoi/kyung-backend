@@ -49,6 +49,10 @@ yarn prisma generate
 
 Use `yarn prisma studio` to open the database GUI.
 
+### API docs (Swagger)
+
+With the app running, open [http://localhost:8080/docs](http://localhost:8080/docs) for the Swagger UI. It's protected with basic auth (default: `admin` / `admin`). Set `SWAGGER_USER` and `SWAGGER_PASS` in `.env` to customize.
+
 ## Compile and run the project
 
 ```bash
