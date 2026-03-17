@@ -12,6 +12,9 @@ export class UserDetailDto {
   @ApiPropertyOptional()
   name: string | null;
 
+  @ApiProperty()
+  phone: string;
+
   @ApiProperty({ enum: UserRole })
   role: UserRole;
 

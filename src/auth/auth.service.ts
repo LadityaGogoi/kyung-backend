@@ -27,14 +27,21 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: dto.email.toLowerCase() },
+          { phone: dto.phone },
+        ],
+      },
+      select: { email: true, phone: true },
     });
     if (existing) {
+      const field = existing.email === dto.email.toLowerCase() ? 'email' : 'phone number';
       throw new ConflictException({
         message: {
           title: 'Registration Failed',
-          subTitle: 'An account with this email already exists',
+          subTitle: `An account with this ${field} already exists`,
         },
       });
     }
@@ -44,6 +51,7 @@ export class AuthService {
       data: {
         email: dto.email.toLowerCase(),
         password: hashedPassword,
+        phone: dto.phone,
         name: dto.name ?? null,
         role: UserRole.CUSTOMER,
       },
