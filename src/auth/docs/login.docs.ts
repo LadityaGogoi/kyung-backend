@@ -7,7 +7,7 @@ import {
 } from '../response';
 
 export const LoginDocs = applyDecorators(
-  ApiOperation({ summary: 'Login with email and password' }),
+  ApiOperation({ summary: 'Login with phone number and password' }),
   ApiBody({ type: LoginDto }),
   ApiOkResponse({
     description: 'Tokens and user returned',

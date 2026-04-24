@@ -29,10 +29,13 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  addresses  Address[]
-  cart       Cart?
-  orders     Order[]
-  reviews    Review[]
+  addresses      Address[]
+  cart           Cart?
+  orders         Order[]
+  reviews        Review[]
+  orderEvents    OrderEvent[]  // to be used to build the chatbot
+  conversations  Conversation[]  // to be used to build the chatbot
+  refreshTokens  RefreshToken[]
 }
 
 model Address {
@@ -167,7 +170,8 @@ model Order {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  items OrderItem[]
+  items       OrderItem[]
+  events      OrderEvent[]
 }
 
 model OrderItem {
@@ -184,6 +188,79 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+// ----- Auth -----
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique  // bcrypt hash of the raw token
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ----- Order Events ----- // to be used to build the chatbot
+
+enum OrderEventType {
+  ORDER_PLACED
+  STATUS_CHANGED
+  PAYMENT_CONFIRMED
+  PAYMENT_FAILED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  NOTE_ADDED
+}
+
+model OrderEvent {
+  id        String         @id @default(cuid())
+  orderId   String
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      OrderEventType
+  payload   Json?          // flexible data: old/new status, amounts, notes, etc.
+  createdAt DateTime       @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([orderId, createdAt(sort: Desc)])
+}
+
+// ----- Chatbot ----- // to be used to build the chatbot
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?   // optional, can be auto-generated from first message
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  Message[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  metadata       Json?        // e.g. model used, token counts, event snapshot IDs
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }
 
 // ----- Reviews -----

@@ -17,6 +17,7 @@ import type {
 } from './response';
 
 const SALT_ROUNDS = 10;
+const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
 @Injectable()
 export class AuthService {
@@ -57,7 +58,7 @@ export class AuthService {
       },
     });
 
-    const tokens = await this.signToken(user.id, user.email);
+    const tokens = await this.signAndStoreToken(user.id, user.email);
     return {
       message: { title: 'Success', subTitle: 'Account created successfully' },
       access_token: tokens.access_token,
@@ -67,7 +68,7 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<LoginResponseDto> {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
+      where: { phone: dto.phone },
     });
     if (!user) {
       this.throwInvalidCredentials();
@@ -78,7 +79,7 @@ export class AuthService {
       this.throwInvalidCredentials();
     }
 
-    const tokens = await this.signToken(user.id, user.email);
+    const tokens = await this.signAndStoreToken(user.id, user.email);
     return {
       message: { title: 'Success', subTitle: 'Login successful' },
       access_token: tokens.access_token,
@@ -106,9 +107,33 @@ export class AuthService {
       });
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+    // Find a stored token that matches
+    const storedTokens = await this.prisma.refreshToken.findMany({
+      where: { userId: payload.sub, expiresAt: { gt: new Date() } },
     });
+
+    let matched: (typeof storedTokens)[number] | undefined;
+    for (const stored of storedTokens) {
+      const isMatch = await bcrypt.compare(refreshToken, stored.tokenHash);
+      if (isMatch) {
+        matched = stored;
+        break;
+      }
+    }
+
+    if (!matched) {
+      throw new UnauthorizedException({
+        message: {
+          title: 'Authentication Failed',
+          subTitle: 'Refresh token has been revoked or is invalid',
+        },
+      });
+    }
+
+    // Rotate: delete the used token
+    await this.prisma.refreshToken.delete({ where: { id: matched.id } });
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
       throw new UnauthorizedException({
         message: {
@@ -118,7 +143,7 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.signToken(user.id, user.email);
+    const tokens = await this.signAndStoreToken(user.id, user.email);
     return {
       message: { title: 'Success', subTitle: 'Tokens refreshed successfully' },
       access_token: tokens.access_token,
@@ -126,24 +151,20 @@ export class AuthService {
     };
   }
 
-  private async signToken(
+  async logout(userId: string): Promise<void> {
+    await this.prisma.refreshToken.deleteMany({ where: { userId } });
+  }
+
+  private async signAndStoreToken(
     userId: string,
     email: string,
   ): Promise<{ access_token: string; refresh_token: string }> {
-    const payload: JwtPayload = {
-      sub: userId,
-      email,
-    };
+    const payload: JwtPayload = { sub: userId, email };
 
     const accessSecret = this.config.get<string>('JWT_ACCESS_SECRET');
     const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET');
-
-    if (!accessSecret) {
-      throw new Error('JWT_ACCESS_SECRET is not defined');
-    }
-    if (!refreshSecret) {
-      throw new Error('JWT_REFRESH_SECRET is not defined');
-    }
+    if (!accessSecret) throw new Error('JWT_ACCESS_SECRET is not defined');
+    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET is not defined');
 
     const access_token = await this.jwt.signAsync(payload, {
       expiresIn: '6h',
@@ -151,21 +172,32 @@ export class AuthService {
     });
 
     const refresh_token = await this.jwt.signAsync(payload, {
-      expiresIn: '7d',
+      expiresIn: `${REFRESH_TOKEN_EXPIRY_DAYS}d`,
       secret: refreshSecret,
     });
 
-    return {
-      access_token,
-      refresh_token,
-    };
+    // Store hashed refresh token
+    const tokenHash = await bcrypt.hash(refresh_token, SALT_ROUNDS);
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+    await this.prisma.refreshToken.create({
+      data: { userId, tokenHash, expiresAt },
+    });
+
+    // Clean up expired tokens for this user (housekeeping)
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId, expiresAt: { lt: new Date() } },
+    });
+
+    return { access_token, refresh_token };
   }
 
   private throwInvalidCredentials(): never {
     throw new UnauthorizedException({
       message: {
         title: 'Authentication Failed',
-        subTitle: 'Invalid email or password',
+        subTitle: 'Invalid phone number or password',
       },
     });
   }
