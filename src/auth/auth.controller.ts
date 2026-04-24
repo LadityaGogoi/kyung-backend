@@ -1,11 +1,16 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto, RefreshTokenDto } from './dto';
 import { RegisterDocs, LoginDocs, RefreshDocs } from './docs';
+import { CurrentUser } from './decorators/current-user.decorator';
+import type { UserWithoutPassword } from './strategies/jwt.strategy';
 
 @ApiTags('auth')
-@Controller('auth')
+@Controller({ path: 'auth', version: '1' })
+@Throttle({ auth: { ttl: 60_000, limit: 10 } })
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -25,5 +30,12 @@ export class AuthController {
   @RefreshDocs
   async refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto.refresh_token);
+  }
+
+  @Post('logout')
+  @UseGuards(AuthGuard('jwt'))
+  async logout(@CurrentUser() user: UserWithoutPassword) {
+    await this.authService.logout(user.id);
+    return { message: { title: 'Success', subTitle: 'Logged out successfully' } };
   }
 }

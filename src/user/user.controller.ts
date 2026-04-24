@@ -7,7 +7,7 @@ import type { UserWithoutPassword } from '@auth/strategies/jwt.strategy';
 import { CurrentUser } from '@auth/decorators/current-user.decorator';
 
 @ApiTags('user')
-@Controller('user')
+@Controller({ path: 'user', version: '1' })
 export class UserController {
   constructor(private readonly userService: UserService) {}
 

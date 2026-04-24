@@ -45,6 +45,9 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Postman
+/postman
+
 # temp directory
 .temp
 .tmp
@@ -57,3 +60,5 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+prisma/migrations/20260422163935_new_mig/
+.postman/
