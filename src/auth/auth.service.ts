@@ -63,6 +63,7 @@ export class AuthService {
       message: { title: 'Success', subTitle: 'Account created successfully' },
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
+      role: user.role,
     };
   }
 
@@ -84,6 +85,7 @@ export class AuthService {
       message: { title: 'Success', subTitle: 'Login successful' },
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
+      role: user.role,
     };
   }
 
