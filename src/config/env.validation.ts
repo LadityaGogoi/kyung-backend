@@ -18,6 +18,11 @@ export const envValidationSchema = Joi.object({
   SWAGGER_USER: Joi.string().default('admin'),
   SWAGGER_PASS: Joi.string().default('admin'),
 
+  // Cloudinary
+  CLOUDINARY_CLOUD_NAME: Joi.string().required(),
+  CLOUDINARY_API_KEY: Joi.string().required(),
+  CLOUDINARY_API_SECRET: Joi.string().required(),
+
   // CORS (optional, only required in production)
   CORS_ALLOWED_DOMAIN: Joi.string().optional(),
   CORS_ORIGIN: Joi.string().optional(),

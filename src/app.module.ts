@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { UploadModule } from './upload/upload.module';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
@@ -34,6 +35,7 @@ import { envValidationSchema } from './config/env.validation';
     PrismaModule,
     AuthModule,
     UserModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [
