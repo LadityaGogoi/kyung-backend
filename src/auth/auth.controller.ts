@@ -6,7 +6,7 @@ import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto, RefreshTokenDto } from './dto';
 import { RegisterDocs, LoginDocs, RefreshDocs } from './docs';
 import { CurrentUser } from './decorators/current-user.decorator';
-import type { UserWithoutPassword } from './strategies/jwt.strategy';
+import type { UserWithoutPassword } from '@common/types';
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })

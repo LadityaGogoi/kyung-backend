@@ -39,19 +39,20 @@ model User {
 }
 
 model Address {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label     String?  // e.g. "Home", "Office"
-  street    String
-  street2   String?
-  city      String
-  state     String?
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String?  // e.g. "Home", "Office"
+  street     String   // house / flat number
+  street2    String?  // locality / area
+  landmark   String?  // nearby landmark
+  city       String
+  state      String?
   postalCode String
-  country   String   @default("US")
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  country    String   @default("India")
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   ordersShipping Order[] @relation("ShippingAddress")
   ordersBilling  Order[] @relation("BillingAddress")
@@ -96,7 +97,6 @@ model Product {
   isFeatured  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
   images     ProductImage[]
   cartItems  CartItem[]
   orderItems OrderItem[]
@@ -104,12 +104,13 @@ model Product {
 }
 
 model ProductImage {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   url       String
+  publicId  String   // Cloudinary public ID for deletion / transformation
   alt       String?
-  sortOrder Int     @default(0)
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 }
 
@@ -278,6 +279,20 @@ model Review {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  images    ReviewImage[]
+
   @@unique([userId, productId])
   @@index([productId])
+}
+
+model ReviewImage {
+  id        String   @id @default(cuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  url       String
+  publicId  String   // Cloudinary public ID for deletion / transformation
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([reviewId])
 }

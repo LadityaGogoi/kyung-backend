@@ -9,7 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '@prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 import { LoginDto, RegisterDto } from './dto';
-import type { JwtPayload } from './strategies/jwt.strategy';
+import type { JwtPayload } from '@common/types';
 import type {
   RegisterResponseDto,
   LoginResponseDto,
