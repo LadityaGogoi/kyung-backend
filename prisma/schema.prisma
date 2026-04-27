@@ -344,10 +344,12 @@ model ReviewImage {
 enum AdminRequestType {
   ROLE_CHANGE
   DELETE_USER
+  EDIT_USER
   CREATE_PRODUCT
   EDIT_PRODUCT
   DELETE_PRODUCT
   UPDATE_ORDER_STATUS
+  EDIT_ORDER
 }
 
 enum AdminRequestStatus {

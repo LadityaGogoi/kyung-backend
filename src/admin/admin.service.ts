@@ -129,6 +129,25 @@ export class AdminService {
     return { message: { title: 'Success', subTitle: 'Role updated' }, user: updated };
   }
 
+  async updateUser(
+    id: string,
+    dto: Partial<{ name: string; phone: string; email: string; emailVerified: boolean }>,
+  ) {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'User not found' } });
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: dto,
+      select: {
+        id: true, email: true, name: true, phone: true,
+        role: true, avatarUrl: true, emailVerified: true,
+        createdAt: true, updatedAt: true,
+      },
+    });
+    return { message: { title: 'Success', subTitle: 'User updated' }, user: updated };
+  }
+
   async deleteUser(actorRole: UserRole, id: string) {
     if (!can(actorRole, 'CAN_APPROVE')) {
       throw new ForbiddenException({
@@ -181,8 +200,11 @@ export class AdminService {
     if (type === AdminRequestType.ROLE_CHANGE && !targetRole) {
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetRole required for ROLE_CHANGE' } });
     }
-    if ((type === AdminRequestType.ROLE_CHANGE || type === AdminRequestType.DELETE_USER) && !targetUserId) {
+    if ((type === AdminRequestType.ROLE_CHANGE || type === AdminRequestType.DELETE_USER || type === AdminRequestType.EDIT_USER) && !targetUserId) {
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetUserId required for user requests' } });
+    }
+    if (type === AdminRequestType.EDIT_USER && !payload) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'payload required for EDIT_USER' } });
     }
     if ((type === AdminRequestType.EDIT_PRODUCT || type === AdminRequestType.DELETE_PRODUCT) && !targetProductId) {
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetProductId required for product requests' } });
@@ -192,6 +214,9 @@ export class AdminService {
     }
     if (type === AdminRequestType.UPDATE_ORDER_STATUS && (!targetOrderId || !payload?.status)) {
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetOrderId and payload.status required for UPDATE_ORDER_STATUS' } });
+    }
+    if (type === AdminRequestType.EDIT_ORDER && (!targetOrderId || !payload)) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetOrderId and payload required for EDIT_ORDER' } });
     }
 
     // Prevent duplicate pending requests for same target (CREATE_PRODUCT has no target, skip)
@@ -243,8 +268,22 @@ export class AdminService {
           await tx.user.update({ where: { id: req.targetUserId }, data: { role: req.targetRole } });
         } else if (req.type === AdminRequestType.DELETE_USER && req.targetUserId) {
           await tx.user.delete({ where: { id: req.targetUserId } });
+        } else if (req.type === AdminRequestType.EDIT_USER && req.targetUserId && req.payload) {
+          await tx.user.update({ where: { id: req.targetUserId }, data: req.payload as object });
         } else if (req.type === AdminRequestType.CREATE_PRODUCT && req.payload) {
-          await tx.product.create({ data: req.payload as any });
+          const { images: imgList, ...productFields } = req.payload as Record<string, unknown>;
+          const product = await tx.product.create({ data: productFields as any });
+          if (Array.isArray(imgList) && imgList.length > 0) {
+            await tx.productImage.createMany({
+              data: (imgList as { url: string; publicId: string; alt?: string }[]).map((img, i) => ({
+                productId: product.id,
+                url: img.url,
+                publicId: img.publicId,
+                alt: img.alt ?? null,
+                sortOrder: i,
+              })),
+            });
+          }
         } else if (req.type === AdminRequestType.EDIT_PRODUCT && req.targetProductId && req.payload) {
           await tx.product.update({ where: { id: req.targetProductId }, data: req.payload as object });
         } else if (req.type === AdminRequestType.DELETE_PRODUCT && req.targetProductId) {
@@ -254,6 +293,12 @@ export class AdminService {
           await tx.order.update({ where: { id: req.targetOrderId }, data: { status: p.status } });
           await tx.orderEvent.create({
             data: { orderId: req.targetOrderId, userId: approverId, type: 'STATUS_CHANGED', payload: { via: 'employee_request', to: p.status } },
+          });
+        } else if (req.type === AdminRequestType.EDIT_ORDER && req.targetOrderId && req.payload) {
+          const { status: _s, ...orderFields } = req.payload as Record<string, unknown>;
+          await tx.order.update({ where: { id: req.targetOrderId }, data: orderFields });
+          await tx.orderEvent.create({
+            data: { orderId: req.targetOrderId, userId: approverId, type: 'NOTE_ADDED', payload: { via: 'employee_request', action: 'fields_updated', fields: Object.keys(orderFields) } },
           });
         }
       }
@@ -346,6 +391,22 @@ export class AdminService {
     return { message: { title: 'Success', subTitle: 'Product updated' }, product };
   }
 
+  async setProductImages(id: string, images: { url: string; publicId: string; alt?: string }[]) {
+    const existing = await this.prisma.product.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
+
+    await this.prisma.$transaction([
+      this.prisma.productImage.deleteMany({ where: { productId: id } }),
+      ...images.map((img, i) =>
+        this.prisma.productImage.create({
+          data: { productId: id, url: img.url, publicId: img.publicId, alt: img.alt, sortOrder: i },
+        }),
+      ),
+    ]);
+
+    return { message: { title: 'Success', subTitle: 'Images updated' } };
+  }
+
   async deleteProduct(id: string) {
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
@@ -409,6 +470,27 @@ export class AdminService {
       discount: Number(order.discount),
       total: Number(order.total),
       items: order.items.map(i => ({ ...i, priceAtPurchase: Number(i.priceAtPurchase) })),
+    };
+  }
+
+  async updateOrder(
+    id: string,
+    dto: Partial<{ subtotal: number; shippingCost: number; tax: number; discount: number; total: number; notes: string }>,
+    adminId: string,
+  ) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Order not found' } });
+
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.order.update({ where: { id }, data: dto }),
+      this.prisma.orderEvent.create({
+        data: { orderId: id, userId: adminId, type: 'NOTE_ADDED', payload: { action: 'fields_updated', fields: Object.keys(dto) } },
+      }),
+    ]);
+
+    return {
+      message: { title: 'Success', subTitle: 'Order updated' },
+      order: { ...updated, subtotal: Number(updated.subtotal), shippingCost: Number(updated.shippingCost), tax: Number(updated.tax), discount: Number(updated.discount), total: Number(updated.total) },
     };
   }
 

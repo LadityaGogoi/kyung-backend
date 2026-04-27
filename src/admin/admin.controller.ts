@@ -7,9 +7,12 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminRequestStatus, OrderStatus } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { SetProductImagesDto } from './dto/set-product-images.dto';
 import { CreateAdminRequestDto } from './dto/create-admin-request.dto';
 import { ResolveAdminRequestDto } from './dto/resolve-admin-request.dto';
 import { RolesGuard } from '@auth/guards/roles.guard';
@@ -46,6 +49,12 @@ export class AdminController {
   @Get('users/:id')
   getUser(@Param('id') id: string) {
     return this.adminService.getUser(id);
+  }
+
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @Patch('users/:id')
+  updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.adminService.updateUser(id, dto);
   }
 
   @Roles(...RoleGroups.CAN_ASSIGN_ROLE)
@@ -136,6 +145,12 @@ export class AdminController {
   }
 
   @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @Patch('products/:id/images')
+  setProductImages(@Param('id') id: string, @Body() dto: SetProductImagesDto) {
+    return this.adminService.setProductImages(id, dto.images);
+  }
+
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
   @Delete('products/:id')
   deleteProduct(@Param('id') id: string) {
     return this.adminService.deleteProduct(id);
@@ -155,6 +170,16 @@ export class AdminController {
   @Get('orders/:id')
   getOrder(@Param('id') id: string) {
     return this.adminService.getOrder(id);
+  }
+
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @Patch('orders/:id')
+  updateOrder(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderDto,
+    @CurrentUser() admin: UserWithoutPassword,
+  ) {
+    return this.adminService.updateOrder(id, dto, admin.id);
   }
 
   @Roles(...RoleGroups.CAN_DIRECT_EDIT)
