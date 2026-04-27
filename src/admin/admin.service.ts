@@ -1,6 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { UserRole, OrderStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AdminRequestStatus,
+  AdminRequestType,
+  Gender,
+  OrderStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
+import { can } from '@auth/roles';
 
 @Injectable()
 export class AdminService {
@@ -29,7 +42,7 @@ export class AdminService {
           id: true, email: true, name: true, phone: true,
           role: true, avatarUrl: true, emailVerified: true,
           createdAt: true, updatedAt: true,
-          _count: { select: { orders: true } },
+          _count: { select: { orders: true, reviews: true } },
         },
       }),
       this.prisma.user.count({ where }),
@@ -47,25 +60,65 @@ export class AdminService {
         createdAt: true, updatedAt: true,
         addresses: true,
         orders: {
-          include: { items: true },
+          include: { items: true, shippingAddress: true },
           orderBy: { createdAt: 'desc' },
-          take: 10,
+        },
+        reviews: {
+          include: { product: { select: { id: true, name: true, slug: true } }, images: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        cart: {
+          include: {
+            items: {
+              include: { product: { select: { id: true, name: true, slug: true, price: true, images: { take: 1 } } } },
+            },
+          },
+        },
+        wishlist: {
+          include: {
+            items: {
+              include: { product: { select: { id: true, name: true, slug: true, price: true, images: { take: 1 } } } },
+            },
+          },
         },
         _count: { select: { orders: true, reviews: true } },
       },
     });
 
     if (!user) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'User not found' } });
-    return user;
+
+    return {
+      ...user,
+      orders: user.orders.map(o => ({
+        ...o,
+        subtotal: Number(o.subtotal),
+        shippingCost: Number(o.shippingCost),
+        tax: Number(o.tax),
+        discount: Number(o.discount),
+        total: Number(o.total),
+        items: o.items.map(i => ({ ...i, priceAtPurchase: Number(i.priceAtPurchase) })),
+      })),
+    };
   }
 
-  async updateUserRole(id: string, role: UserRole) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
-    if (!user) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'User not found' } });
+  // Only MASTER_ADMIN can promote to ADMIN/MASTER_ADMIN or demote from ADMIN/MASTER_ADMIN
+  // Regular ADMIN can only change between DEVELOPER/TESTER/CUSTOMER via a request
+  async updateUserRole(actorRole: UserRole, targetId: string, newRole: UserRole) {
+    const target = await this.prisma.user.findUnique({ where: { id: targetId } });
+    if (!target) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'User not found' } });
+
+    const isElevation = can(newRole, 'PROTECTED_ROLES');
+    const isFromProtected = can(target.role, 'PROTECTED_ROLES');
+
+    if ((isElevation || isFromProtected) && !can(actorRole, 'CAN_ASSIGN_ROLE')) {
+      throw new ForbiddenException({
+        message: { title: 'Forbidden', subTitle: 'Only Master Admin can assign or remove Admin roles' },
+      });
+    }
 
     const updated = await this.prisma.user.update({
-      where: { id },
-      data: { role },
+      where: { id: targetId },
+      data: { role: newRole },
       select: {
         id: true, email: true, name: true, phone: true,
         role: true, avatarUrl: true, emailVerified: true,
@@ -76,11 +129,149 @@ export class AdminService {
     return { message: { title: 'Success', subTitle: 'Role updated' }, user: updated };
   }
 
-  async deleteUser(id: string) {
+  async deleteUser(actorRole: UserRole, id: string) {
+    if (!can(actorRole, 'CAN_APPROVE')) {
+      throw new ForbiddenException({
+        message: { title: 'Forbidden', subTitle: 'Only Master Admin can delete users' },
+      });
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'User not found' } });
+
     await this.prisma.user.delete({ where: { id } });
     return { message: { title: 'Success', subTitle: 'User deleted' } };
+  }
+
+  // ── Admin Requests ─────────────────────────────────────────────────────────
+
+  async getAdminRequests(page: number, limit: number, status?: AdminRequestStatus) {
+    const where = status ? { status } : {};
+    const [requests, total] = await Promise.all([
+      this.prisma.adminRequest.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          requestedBy: { select: { id: true, name: true, email: true, role: true } },
+          approvedBy: { select: { id: true, name: true, email: true } },
+        },
+        // targetProductId and targetOrderId are returned as plain fields
+      }),
+      this.prisma.adminRequest.count({ where }),
+    ]);
+    return { requests, total, page, limit };
+  }
+
+  async createAdminRequest(
+    requesterId: string,
+    type: AdminRequestType,
+    opts: {
+      targetUserId?: string;
+      targetRole?: UserRole;
+      targetProductId?: string;
+      targetOrderId?: string;
+      payload?: Record<string, unknown>;
+      reason?: string;
+    },
+  ) {
+    const { targetUserId, targetRole, targetProductId, targetOrderId, payload, reason } = opts;
+
+    if (type === AdminRequestType.ROLE_CHANGE && !targetRole) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetRole required for ROLE_CHANGE' } });
+    }
+    if ((type === AdminRequestType.ROLE_CHANGE || type === AdminRequestType.DELETE_USER) && !targetUserId) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetUserId required for user requests' } });
+    }
+    if ((type === AdminRequestType.EDIT_PRODUCT || type === AdminRequestType.DELETE_PRODUCT) && !targetProductId) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetProductId required for product requests' } });
+    }
+    if ((type === AdminRequestType.EDIT_PRODUCT || type === AdminRequestType.CREATE_PRODUCT) && !payload) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'payload required for EDIT_PRODUCT / CREATE_PRODUCT' } });
+    }
+    if (type === AdminRequestType.UPDATE_ORDER_STATUS && (!targetOrderId || !payload?.status)) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'targetOrderId and payload.status required for UPDATE_ORDER_STATUS' } });
+    }
+
+    // Prevent duplicate pending requests for same target (CREATE_PRODUCT has no target, skip)
+    const existingWhere =
+      targetUserId ? { targetUserId, status: AdminRequestStatus.PENDING } :
+      targetProductId ? { targetProductId, status: AdminRequestStatus.PENDING } :
+      targetOrderId ? { targetOrderId, status: AdminRequestStatus.PENDING } :
+      null;
+
+    if (existingWhere) {
+      const existing = await this.prisma.adminRequest.findFirst({ where: existingWhere as object });
+      if (existing) throw new BadRequestException({ message: { title: 'Conflict', subTitle: 'A pending request already exists for this target' } });
+    }
+
+    const request = await this.prisma.adminRequest.create({
+      data: { type, targetUserId, targetRole, targetProductId, targetOrderId, payload: payload !== undefined ? (payload as Prisma.InputJsonValue) : Prisma.DbNull, reason, requestedById: requesterId },
+      include: { requestedBy: { select: { id: true, name: true, email: true } } },
+    });
+
+    return { message: { title: 'Success', subTitle: 'Request submitted' }, request };
+  }
+
+  async resolveAdminRequest(
+    approverId: string,
+    approverRole: UserRole,
+    requestId: string,
+    status: 'APPROVED' | 'REJECTED',
+  ) {
+    if (!can(approverRole, 'CAN_APPROVE')) {
+      throw new ForbiddenException({
+        message: { title: 'Forbidden', subTitle: 'Only Master Admin can approve or reject requests' },
+      });
+    }
+
+    const req = await this.prisma.adminRequest.findUnique({ where: { id: requestId } });
+    if (!req) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Request not found' } });
+    if (req.status !== AdminRequestStatus.PENDING) {
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'Request already resolved' } });
+    }
+
+    const updated = await this.prisma.$transaction(async tx => {
+      const resolved = await tx.adminRequest.update({
+        where: { id: requestId },
+        data: { status, approvedById: approverId, approvedAt: new Date() },
+      });
+
+      if (status === AdminRequestStatus.APPROVED) {
+        if (req.type === AdminRequestType.ROLE_CHANGE && req.targetRole && req.targetUserId) {
+          await tx.user.update({ where: { id: req.targetUserId }, data: { role: req.targetRole } });
+        } else if (req.type === AdminRequestType.DELETE_USER && req.targetUserId) {
+          await tx.user.delete({ where: { id: req.targetUserId } });
+        } else if (req.type === AdminRequestType.CREATE_PRODUCT && req.payload) {
+          await tx.product.create({ data: req.payload as any });
+        } else if (req.type === AdminRequestType.EDIT_PRODUCT && req.targetProductId && req.payload) {
+          await tx.product.update({ where: { id: req.targetProductId }, data: req.payload as object });
+        } else if (req.type === AdminRequestType.DELETE_PRODUCT && req.targetProductId) {
+          await tx.product.delete({ where: { id: req.targetProductId } });
+        } else if (req.type === AdminRequestType.UPDATE_ORDER_STATUS && req.targetOrderId && req.payload) {
+          const p = req.payload as { status: OrderStatus };
+          await tx.order.update({ where: { id: req.targetOrderId }, data: { status: p.status } });
+          await tx.orderEvent.create({
+            data: { orderId: req.targetOrderId, userId: approverId, type: 'STATUS_CHANGED', payload: { via: 'employee_request', to: p.status } },
+          });
+        }
+      }
+
+      return resolved;
+    });
+
+    return { message: { title: 'Success', subTitle: `Request ${status.toLowerCase()}` }, request: updated };
+  }
+
+  // ── Categories ─────────────────────────────────────────────────────────────
+
+  async getCategories() {
+    return this.prisma.category.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, parentId: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   // ── Products ───────────────────────────────────────────────────────────────
@@ -101,7 +292,11 @@ export class AdminService {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { category: { select: { id: true, name: true } }, images: { take: 1, orderBy: { sortOrder: 'asc' } } },
+        include: {
+          category: { select: { id: true, name: true } },
+          subcategory: { select: { id: true, name: true } },
+          images: { take: 1, orderBy: { sortOrder: 'asc' } },
+        },
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -114,6 +309,7 @@ export class AdminService {
       where: { id },
       include: {
         category: true,
+        subcategory: true,
         images: { orderBy: { sortOrder: 'asc' } },
         _count: { select: { reviews: true, orderItems: true } },
       },
@@ -127,7 +323,9 @@ export class AdminService {
     price: number; compareAtPrice?: number; costPerItem?: number;
     sku?: string; barcode?: string;
     trackInventory?: boolean; stockQuantity?: number; lowStockThreshold?: number;
-    weight?: number; categoryId?: string; isActive?: boolean; isFeatured?: boolean;
+    weight?: number; categoryId?: string; subcategoryId?: string;
+    gender?: Gender; colour?: string;
+    isActive?: boolean; isFeatured?: boolean;
   }) {
     const product = await this.prisma.product.create({ data: dto as any });
     return { message: { title: 'Success', subTitle: 'Product created' }, product };
@@ -138,7 +336,8 @@ export class AdminService {
     price: number; compareAtPrice: number; costPerItem: number;
     sku: string; barcode: string; trackInventory: boolean;
     stockQuantity: number; lowStockThreshold: number; weight: number;
-    categoryId: string; isActive: boolean; isFeatured: boolean;
+    categoryId: string; subcategoryId: string; gender: Gender; colour: string;
+    isActive: boolean; isFeatured: boolean;
   }>) {
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
@@ -248,10 +447,10 @@ export class AdminService {
       }),
     ]);
 
-    const ordersByStatus = await this.prisma.order.groupBy({
-      by: ['status'],
-      _count: { _all: true },
-    });
+    const [ordersByStatus, pendingRequests] = await Promise.all([
+      this.prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
+      this.prisma.adminRequest.count({ where: { status: AdminRequestStatus.PENDING } }),
+    ]);
 
     return {
       totalUsers,
@@ -259,6 +458,8 @@ export class AdminService {
       totalProducts,
       totalRevenue: Number(revenueAgg._sum.total ?? 0),
       ordersByStatus: ordersByStatus.map(r => ({ status: r.status, count: r._count._all })),
+      pendingRequests,
     };
   }
+
 }

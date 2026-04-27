@@ -150,6 +150,7 @@ export class AuthService {
       message: { title: 'Success', subTitle: 'Tokens refreshed successfully' },
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
+      role: user.role,
     };
   }
 
