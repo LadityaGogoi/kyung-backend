@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
+import { ProductsModule } from './products/products.module';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
@@ -38,6 +39,7 @@ import { envValidationSchema } from './config/env.validation';
     UserModule,
     UploadModule,
     AdminModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [
