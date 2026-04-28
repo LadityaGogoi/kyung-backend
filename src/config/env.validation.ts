@@ -27,6 +27,10 @@ export const envValidationSchema = Joi.object({
   CORS_ALLOWED_DOMAIN: Joi.string().optional(),
   CORS_ORIGIN: Joi.string().optional(),
 
+  // Redis
+  REDIS_HOST: Joi.string().default('localhost'),
+  REDIS_PORT: Joi.number().default(6379),
+
   // Docker Postgres (used by docker-compose, not the app directly)
   POSTGRES_USER: Joi.string().optional(),
   POSTGRES_PASSWORD: Joi.string().optional(),

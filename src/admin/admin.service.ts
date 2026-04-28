@@ -14,10 +14,14 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
 import { can } from '@auth/roles';
+import { ProductsService } from '../products/products.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly productsService: ProductsService,
+  ) {}
 
   // ── Users ──────────────────────────────────────────────────────────────────
 
@@ -306,6 +310,16 @@ export class AdminService {
       return resolved;
     });
 
+    // Invalidate product cache for any approved product mutation
+    if (
+      status === AdminRequestStatus.APPROVED &&
+      (req.type === AdminRequestType.CREATE_PRODUCT ||
+        req.type === AdminRequestType.EDIT_PRODUCT ||
+        req.type === AdminRequestType.DELETE_PRODUCT)
+    ) {
+      await this.productsService.invalidateProductCache();
+    }
+
     return { message: { title: 'Success', subTitle: `Request ${status.toLowerCase()}` }, request: updated };
   }
 
@@ -373,6 +387,7 @@ export class AdminService {
     isActive?: boolean; isFeatured?: boolean;
   }) {
     const product = await this.prisma.product.create({ data: dto as any });
+    await this.productsService.invalidateProductCache();
     return { message: { title: 'Success', subTitle: 'Product created' }, product };
   }
 
@@ -388,6 +403,7 @@ export class AdminService {
     if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
 
     const product = await this.prisma.product.update({ where: { id }, data: dto as any });
+    await this.productsService.invalidateProductCache();
     return { message: { title: 'Success', subTitle: 'Product updated' }, product };
   }
 
@@ -404,6 +420,7 @@ export class AdminService {
       ),
     ]);
 
+    await this.productsService.invalidateProductCache();
     return { message: { title: 'Success', subTitle: 'Images updated' } };
   }
 
@@ -411,6 +428,7 @@ export class AdminService {
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
     await this.prisma.product.delete({ where: { id } });
+    await this.productsService.invalidateProductCache();
     return { message: { title: 'Success', subTitle: 'Product deleted' } };
   }
 

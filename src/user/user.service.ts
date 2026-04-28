@@ -1,13 +1,16 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import type Redis from 'ioredis';
 import { PrismaService } from '@prisma/prisma.service';
+import { REDIS_CLIENT } from '@redis/redis.module';
 import type { UserWithoutPassword } from '@common/types';
 import type {
   GetUserResponseDto,
@@ -26,19 +29,16 @@ import type {
 } from './dto';
 import { MessageResponse } from '@utils';
 
-interface OtpEntry {
-  code: string;
-  field: 'email' | 'phone';
-  value: string;
-  expiresAt: number;
-}
+const OTP_TTL = 300; // seconds
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
-  private readonly otpStore = new Map<string, OtpEntry>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
 
   // ── OTP ────────────────────────────────────────────────────────────────────
 
@@ -54,12 +54,8 @@ export class UserService {
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    this.otpStore.set(`${userId}:${dto.field}`, {
-      code,
-      field: dto.field,
-      value: dto.value,
-      expiresAt: Date.now() + 5 * 60 * 1000,
-    });
+    const key = `otp:${userId}:${dto.field}`;
+    await this.redis.set(key, JSON.stringify({ code, value: dto.value }), 'EX', OTP_TTL);
 
     this.logger.log(`OTP for user ${userId} (${dto.field} → ${dto.value}): ${code}`);
 
@@ -67,15 +63,18 @@ export class UserService {
   }
 
   async verifyOtp(userId: string, dto: VerifyOtpDto): Promise<GetUserResponseDto> {
-    const entry = this.otpStore.get(`${userId}:${dto.field}`);
+    const key = `otp:${userId}:${dto.field}`;
+    const raw = await this.redis.get(key);
 
-    if (!entry || entry.value !== dto.value || entry.code !== dto.otp)
-      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'Invalid OTP' } });
-
-    if (Date.now() > entry.expiresAt)
+    if (!raw)
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'OTP has expired' } });
 
-    this.otpStore.delete(`${userId}:${dto.field}`);
+    const entry: { code: string; value: string } = JSON.parse(raw);
+
+    if (entry.value !== dto.value || entry.code !== dto.otp)
+      throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'Invalid OTP' } });
+
+    await this.redis.del(key);
 
     const data: Record<string, unknown> = {
       ...(dto.field === 'email' && { email: dto.value, emailVerified: true }),

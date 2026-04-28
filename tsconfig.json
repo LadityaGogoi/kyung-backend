@@ -19,7 +19,9 @@
       "@prisma": ["src/prisma"],
       "@prisma/*": ["src/prisma/*"],
       "@common": ["src/common"],
-      "@common/*": ["src/common/*"]
+      "@common/*": ["src/common/*"],
+      "@redis": ["src/redis"],
+      "@redis/*": ["src/redis/*"]
     },
     "incremental": true,
     "skipLibCheck": true,

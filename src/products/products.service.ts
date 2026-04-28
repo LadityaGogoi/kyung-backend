@@ -1,12 +1,71 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Prisma, Gender } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
+import type Redis from 'ioredis';
+import { REDIS_CLIENT } from '@redis/redis.module';
+
+const PRODUCTS_TTL = 300;   // 5 minutes
+const CATEGORIES_TTL = 1800; // 30 minutes
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
 
   async getProducts(opts: {
+    page: number;
+    limit: number;
+    search?: string;
+    categoryId?: string;
+    subcategoryId?: string;
+    gender?: Gender;
+    featured?: boolean;
+    minPrice?: number;
+    maxPrice?: number;
+    inStock?: boolean;
+    sortBy?: 'newest' | 'price_asc' | 'price_desc';
+  }) {
+    const cacheKey = `products:cache:${createHash('md5').update(JSON.stringify(opts)).digest('hex')}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached) return JSON.parse(cached) as ReturnType<typeof this.queryProducts>;
+
+    const result = await this.queryProducts(opts);
+    await this.redis.set(cacheKey, JSON.stringify(result), 'EX', PRODUCTS_TTL);
+    return result;
+  }
+
+  async getCategories() {
+    const cached = await this.redis.get('categories:tree');
+    if (cached) return JSON.parse(cached);
+
+    const result = await this.prisma.category.findMany({
+      where: { parentId: null, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        children: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    await this.redis.set('categories:tree', JSON.stringify(result), 'EX', CATEGORIES_TTL);
+    return result;
+  }
+
+  async invalidateProductCache() {
+    const keys = await this.redis.keys('products:cache:*');
+    if (keys.length > 0) await this.redis.del(...keys);
+  }
+
+  async invalidateCategoryCache() {
+    await this.redis.del('categories:tree');
+  }
+
+  private async queryProducts(opts: {
     page: number;
     limit: number;
     search?: string;
@@ -70,18 +129,5 @@ export class ProductsService {
     ]);
 
     return { products, total, page, limit };
-  }
-
-  async getCategories() {
-    return this.prisma.category.findMany({
-      where: { parentId: null, isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        children: {
-          where: { isActive: true },
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-    });
   }
 }

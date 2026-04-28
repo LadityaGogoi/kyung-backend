@@ -2,12 +2,16 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
+import type Redis from 'ioredis';
 import { PrismaService } from '@prisma/prisma.service';
 import { UserRole } from '@prisma/client';
+import { REDIS_CLIENT } from '@redis/redis.module';
 import { LoginDto, RegisterDto } from './dto';
 import type { JwtPayload } from '@common/types';
 import type {
@@ -18,6 +22,7 @@ import type {
 
 const SALT_ROUNDS = 10;
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
+const REFRESH_TOKEN_EXPIRY_SECONDS = REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60;
 
 @Injectable()
 export class AuthService {
@@ -25,6 +30,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
@@ -109,6 +115,33 @@ export class AuthService {
       });
     }
 
+    // Check Redis blocklist first (O(1)) before hitting Postgres
+    if (payload.jti) {
+      const blocked = await this.redis.get(`blocklist:jti:${payload.jti}`);
+      if (blocked) {
+        throw new UnauthorizedException({
+          message: {
+            title: 'Authentication Failed',
+            subTitle: 'Refresh token has been revoked',
+          },
+        });
+      }
+    }
+
+    // Check all-device revocation timestamp
+    const revokedAllAt = await this.redis.get(`revoked-all:${payload.sub}`);
+    if (revokedAllAt) {
+      const issuedAt = (payload as any).iat as number | undefined;
+      if (!issuedAt || issuedAt < Number(revokedAllAt)) {
+        throw new UnauthorizedException({
+          message: {
+            title: 'Authentication Failed',
+            subTitle: 'All sessions have been revoked',
+          },
+        });
+      }
+    }
+
     // Find a stored token that matches
     const storedTokens = await this.prisma.refreshToken.findMany({
       where: { userId: payload.sub, expiresAt: { gt: new Date() } },
@@ -132,8 +165,23 @@ export class AuthService {
       });
     }
 
-    // Rotate: delete the used token
+    // Rotate: delete the used token, add its JTI to blocklist
     await this.prisma.refreshToken.delete({ where: { id: matched.id } });
+
+    if (payload.jti) {
+      const remainingTtl = Math.max(
+        0,
+        Math.floor(((payload as any).exp as number) - Date.now() / 1000),
+      );
+      if (remainingTtl > 0) {
+        await this.redis.set(
+          `blocklist:jti:${payload.jti}`,
+          '1',
+          'EX',
+          remainingTtl,
+        );
+      }
+    }
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
@@ -155,6 +203,13 @@ export class AuthService {
   }
 
   async logout(userId: string): Promise<void> {
+    // Write revoked-all timestamp so any token issued before now is rejected
+    await this.redis.set(
+      `revoked-all:${userId}`,
+      String(Math.floor(Date.now() / 1000)),
+      'EX',
+      REFRESH_TOKEN_EXPIRY_SECONDS,
+    );
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
   }
 
@@ -162,17 +217,18 @@ export class AuthService {
     userId: string,
     email: string,
   ): Promise<{ access_token: string; refresh_token: string }> {
-    const payload: JwtPayload = { sub: userId, email };
+    const jti = randomUUID();
+    const payload: JwtPayload = { sub: userId, email, jti };
 
     const accessSecret = this.config.get<string>('JWT_ACCESS_SECRET');
     const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET');
     if (!accessSecret) throw new Error('JWT_ACCESS_SECRET is not defined');
     if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET is not defined');
 
-    const access_token = await this.jwt.signAsync(payload, {
-      expiresIn: '6h',
-      secret: accessSecret,
-    });
+    const access_token = await this.jwt.signAsync(
+      { sub: userId, email },
+      { expiresIn: '6h', secret: accessSecret },
+    );
 
     const refresh_token = await this.jwt.signAsync(payload, {
       expiresIn: `${REFRESH_TOKEN_EXPIRY_DAYS}d`,
