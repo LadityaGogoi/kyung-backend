@@ -1,16 +1,23 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { BullModule } from '@nestjs/bullmq';
 import { LoggerModule } from 'nestjs-pino';
+import Redis from 'ioredis';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
 import { ProductsModule } from './products/products.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
+import { CartModule } from './cart/cart.module';
+import { OrdersModule } from './orders/orders.module';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
@@ -30,16 +37,42 @@ import { envValidationSchema } from './config/env.validation';
         redact: ['req.headers.authorization'],
       },
     }),
-    ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60_000, limit: 60 },
-      { name: 'auth', ttl: 60_000, limit: 10 },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          { name: 'default', ttl: 60_000, limit: 60 },
+          { name: 'auth', ttl: 60_000, limit: 10 },
+        ],
+        storage: new ThrottlerStorageRedisService(
+          new Redis({
+            host: config.get<string>('REDIS_HOST', 'localhost'),
+            port: config.get<number>('REDIS_PORT', 6379),
+          }),
+        ),
+      }),
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: config.get<number>('REDIS_PORT', 6379),
+        },
+      }),
+    }),
+    RedisModule,
     PrismaModule,
     AuthModule,
     UserModule,
     UploadModule,
     AdminModule,
     ProductsModule,
+    ChatbotModule,
+    CartModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [
