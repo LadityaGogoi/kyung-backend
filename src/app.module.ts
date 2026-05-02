@@ -20,6 +20,7 @@ import { ProductsModule } from './products/products.module';
 import { ChatbotModule } from './chatbot/chatbot.module';
 import { CartModule } from './cart/cart.module';
 import { OrdersModule } from './orders/orders.module';
+import { WishlistModule } from './wishlist/wishlist.module';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
@@ -77,6 +78,7 @@ import { envValidationSchema } from './config/env.validation';
     ChatbotModule,
     CartModule,
     OrdersModule,
+    WishlistModule,
   ],
   controllers: [AppController],
   providers: [
