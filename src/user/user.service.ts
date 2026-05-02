@@ -30,6 +30,8 @@ import type {
 import { MessageResponse } from '@utils';
 
 const OTP_TTL = 300; // seconds
+/** Until SMS is wired; must match what we store in `PhoneOtp` for phone flow. */
+const STATIC_PHONE_OTP = '9999';
 
 @Injectable()
 export class UserService {
@@ -47,47 +49,102 @@ export class UserService {
       const existing = await this.prisma.user.findUnique({ where: { email: dto.value } });
       if (existing && existing.id !== userId)
         throw new ConflictException({ message: { title: 'Conflict', subTitle: 'Email already in use' } });
-    } else {
-      const existing = await this.prisma.user.findUnique({ where: { phone: dto.value } });
-      if (existing && existing.id !== userId)
-        throw new ConflictException({ message: { title: 'Conflict', subTitle: 'Phone number already in use' } });
+
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const key = `otp:${userId}:${dto.field}`;
+      await this.redis.set(key, JSON.stringify({ code, value: dto.value }), 'EX', OTP_TTL);
+
+      this.logger.log(`OTP for user ${userId} (${dto.field} → ${dto.value}): ${code}`);
+
+      return { otp: code };
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const key = `otp:${userId}:${dto.field}`;
-    await this.redis.set(key, JSON.stringify({ code, value: dto.value }), 'EX', OTP_TTL);
+    // Phone: persist in DB for audit / future SMS; static code for now
+    const existing = await this.prisma.user.findUnique({ where: { phone: dto.value } });
+    if (existing && existing.id !== userId)
+      throw new ConflictException({ message: { title: 'Conflict', subTitle: 'Phone number already in use' } });
 
-    this.logger.log(`OTP for user ${userId} (${dto.field} → ${dto.value}): ${code}`);
+    const expiresAt = new Date(Date.now() + OTP_TTL * 1000);
+    await this.prisma.phoneOtp.deleteMany({ where: { userId } });
+    await this.prisma.phoneOtp.create({
+      data: {
+        userId,
+        phone: dto.value,
+        code: STATIC_PHONE_OTP,
+        name: dto.name?.trim() || null,
+        expiresAt,
+      },
+    });
 
-    return { otp: code };
+    this.logger.log(`Phone OTP for user ${userId} (phone ${dto.value}): ${STATIC_PHONE_OTP} (static; replace with SMS)`);
+
+    return { otp: STATIC_PHONE_OTP };
   }
 
   async verifyOtp(userId: string, dto: VerifyOtpDto): Promise<GetUserResponseDto> {
-    const key = `otp:${userId}:${dto.field}`;
-    const raw = await this.redis.get(key);
+    if (dto.field === 'email') {
+      const key = `otp:${userId}:${dto.field}`;
+      const raw = await this.redis.get(key);
 
-    if (!raw)
+      if (!raw)
+        throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'OTP has expired' } });
+
+      const entry: { code: string; value: string } = JSON.parse(raw);
+
+      if (entry.value !== dto.value || entry.code !== dto.otp)
+        throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'Invalid OTP' } });
+
+      await this.redis.del(key);
+
+      const data: Record<string, unknown> = {
+        email: dto.value,
+        emailVerified: true,
+        ...(dto.name !== undefined && { name: dto.name || null }),
+        ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl || null }),
+      };
+
+      const updated = await this.prisma.user.update({ where: { id: userId }, data });
+      const { password: _p, ...userWithoutPassword } = updated;
+
+      return {
+        message: { title: 'Success', subTitle: 'Email updated successfully' },
+        user: userWithoutPassword as UserWithoutPassword,
+      };
+    }
+
+    const record = await this.prisma.phoneOtp.findFirst({
+      where: {
+        userId,
+        phone: dto.value,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!record)
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'OTP has expired' } });
 
-    const entry: { code: string; value: string } = JSON.parse(raw);
-
-    if (entry.value !== dto.value || entry.code !== dto.otp)
+    if (record.code !== dto.otp)
       throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'Invalid OTP' } });
 
-    await this.redis.del(key);
+    await this.prisma.phoneOtp.delete({ where: { id: record.id } });
 
-    const data: Record<string, unknown> = {
-      ...(dto.field === 'email' && { email: dto.value, emailVerified: true }),
-      ...(dto.field === 'phone' && { phone: dto.value }),
-      ...(dto.name !== undefined && { name: dto.name || null }),
-      ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl || null }),
-    };
+    const nameFromFlow =
+      dto.name !== undefined ? dto.name || null : record.name != null ? record.name : undefined;
 
-    const updated = await this.prisma.user.update({ where: { id: userId }, data });
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        phone: dto.value,
+        phoneVerified: true,
+        ...(nameFromFlow !== undefined && { name: nameFromFlow }),
+        ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl || null }),
+      },
+    });
+
     const { password: _p, ...userWithoutPassword } = updated;
 
     return {
-      message: { title: 'Success', subTitle: `${dto.field === 'email' ? 'Email' : 'Phone'} updated successfully` },
+      message: { title: 'Success', subTitle: 'Phone verified successfully' },
       user: userWithoutPassword as UserWithoutPassword,
     };
   }
@@ -123,16 +180,27 @@ export class UserService {
       }
     }
 
-    const user = await this.prisma.user.update({
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException({
+        message: { title: 'Not Found', subTitle: 'User not found' },
+      });
+    }
+
+    const phoneChanged =
+      dto.phone !== undefined && dto.phone !== user.phone;
+
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...(dto.name !== undefined && { name: dto.name || null }),
         ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(phoneChanged && { phoneVerified: false }),
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl || null }),
       },
     });
 
-    const { password: _password, ...userWithoutPassword } = user;
+    const { password: _password, ...userWithoutPassword } = updated;
     return {
       message: { title: 'Success', subTitle: 'Profile updated successfully' },
       user: userWithoutPassword as UserWithoutPassword,

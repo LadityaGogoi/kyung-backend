@@ -23,13 +23,14 @@ enum UserRole {
 
 model User {
   id        String   @id @default(cuid())
-  email     String   @unique
+  email     String?  @unique
   password  String
   name      String?
   phone     String   @unique
   role      UserRole @default(CUSTOMER)
   avatarUrl String?
   emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -43,6 +44,21 @@ model User {
   refreshTokens  RefreshToken[]
   adminRequests  AdminRequest[] @relation("RequestedBy")
   approvedRequests AdminRequest[] @relation("ApprovedBy")
+  phoneOtps      PhoneOtp[]
+}
+
+/** Pending phone verification OTPs (static code in dev; swap for SMS provider later). */
+model PhoneOtp {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone     String
+  code      String
+  name      String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Address {

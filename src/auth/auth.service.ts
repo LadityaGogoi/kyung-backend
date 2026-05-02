@@ -34,32 +34,41 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: dto.email.toLowerCase() },
-          { phone: dto.phone },
-        ],
-      },
-      select: { email: true, phone: true },
+    const phoneTaken = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+      select: { id: true },
     });
-    if (existing) {
-      const field = existing.email === dto.email.toLowerCase() ? 'email' : 'phone number';
+    if (phoneTaken) {
       throw new ConflictException({
         message: {
           title: 'Registration Failed',
-          subTitle: `An account with this ${field} already exists`,
+          subTitle: 'An account with this phone number already exists',
         },
       });
+    }
+
+    if (dto.email) {
+      const emailTaken = await this.prisma.user.findUnique({
+        where: { email: dto.email.toLowerCase() },
+        select: { id: true },
+      });
+      if (emailTaken) {
+        throw new ConflictException({
+          message: {
+            title: 'Registration Failed',
+            subTitle: 'An account with this email already exists',
+          },
+        });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email.toLowerCase(),
+        email: dto.email?.toLowerCase() ?? null,
         password: hashedPassword,
         phone: dto.phone,
-        name: dto.name ?? null,
+        name: dto.name,
         role: UserRole.CUSTOMER,
       },
     });
@@ -215,10 +224,11 @@ export class AuthService {
 
   private async signAndStoreToken(
     userId: string,
-    email: string,
+    email: string | null,
   ): Promise<{ access_token: string; refresh_token: string }> {
     const jti = randomUUID();
-    const payload: JwtPayload = { sub: userId, email, jti };
+    const emailClaim = email ?? '';
+    const payload: JwtPayload = { sub: userId, email: emailClaim, jti };
 
     const accessSecret = this.config.get<string>('JWT_ACCESS_SECRET');
     const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET');
@@ -226,7 +236,7 @@ export class AuthService {
     if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET is not defined');
 
     const access_token = await this.jwt.signAsync(
-      { sub: userId, email },
+      { sub: userId, email: emailClaim },
       { expiresIn: '6h', secret: accessSecret },
     );
 

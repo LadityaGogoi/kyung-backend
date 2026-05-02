@@ -44,7 +44,7 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, email: true, name: true, phone: true,
-          role: true, avatarUrl: true, emailVerified: true,
+          role: true, avatarUrl: true, emailVerified: true, phoneVerified: true,
           createdAt: true, updatedAt: true,
           _count: { select: { orders: true, reviews: true } },
         },
@@ -60,7 +60,7 @@ export class AdminService {
       where: { id },
       select: {
         id: true, email: true, name: true, phone: true,
-        role: true, avatarUrl: true, emailVerified: true,
+        role: true, avatarUrl: true, emailVerified: true, phoneVerified: true,
         createdAt: true, updatedAt: true,
         addresses: true,
         orders: {
@@ -125,7 +125,7 @@ export class AdminService {
       data: { role: newRole },
       select: {
         id: true, email: true, name: true, phone: true,
-        role: true, avatarUrl: true, emailVerified: true,
+        role: true, avatarUrl: true, emailVerified: true, phoneVerified: true,
         createdAt: true, updatedAt: true,
       },
     });
@@ -135,7 +135,7 @@ export class AdminService {
 
   async updateUser(
     id: string,
-    dto: Partial<{ name: string; phone: string; email: string; emailVerified: boolean }>,
+    dto: Partial<{ name: string; phone: string; email: string; emailVerified: boolean; phoneVerified: boolean }>,
   ) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'User not found' } });
@@ -145,7 +145,7 @@ export class AdminService {
       data: dto,
       select: {
         id: true, email: true, name: true, phone: true,
-        role: true, avatarUrl: true, emailVerified: true,
+        role: true, avatarUrl: true, emailVerified: true, phoneVerified: true,
         createdAt: true, updatedAt: true,
       },
     });

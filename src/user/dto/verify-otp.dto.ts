@@ -1,4 +1,4 @@
-import { IsIn, IsString, IsNotEmpty, Length, IsOptional } from 'class-validator';
+import { IsIn, IsString, IsNotEmpty, IsOptional, Matches } from 'class-validator';
 
 export class VerifyOtpDto {
   @IsIn(['email', 'phone'])
@@ -8,8 +8,9 @@ export class VerifyOtpDto {
   @IsNotEmpty()
   value: string;
 
+  /** 4 digits for static dev phone OTP; 6 for email OTP. */
   @IsString()
-  @Length(6, 6)
+  @Matches(/^\d{4,6}$/)
   otp: string;
 
   @IsOptional()
