@@ -1,30 +1,10 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { UserService } from './user.service';
-import {
-  GetUserDocs,
-  UpdateProfileDocs,
-  GetAddressesDocs,
-  CreateAddressDocs,
-  UpdateAddressDocs,
-  DeleteAddressDocs,
-  SetDefaultAddressDocs,
-  GetOrdersDocs,
-} from './docs';
+import { GetUserDocs, UpdateProfileDocs, GetOrdersDocs } from './docs';
 import {
   UpdateProfileDto,
-  CreateAddressDto,
-  UpdateAddressDto,
   ChangePasswordDto,
   RequestOtpDto,
   VerifyOtpDto,
@@ -52,56 +32,6 @@ export class UserController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.userService.updateProfile(user.id, dto);
-  }
-
-  // ── Addresses ──────────────────────────────────────────────────────────────
-
-  @Get('me/addresses')
-  @UseGuards(AuthGuard('jwt'))
-  @GetAddressesDocs
-  getAddresses(@CurrentUser() user: UserWithoutPassword) {
-    return this.userService.getAddresses(user.id);
-  }
-
-  @Post('me/addresses')
-  @UseGuards(AuthGuard('jwt'))
-  @CreateAddressDocs
-  createAddress(
-    @CurrentUser() user: UserWithoutPassword,
-    @Body() dto: CreateAddressDto,
-  ) {
-    return this.userService.createAddress(user.id, dto);
-  }
-
-  @Patch('me/addresses/:id')
-  @UseGuards(AuthGuard('jwt'))
-  @UpdateAddressDocs
-  updateAddress(
-    @CurrentUser() user: UserWithoutPassword,
-    @Param('id') id: string,
-    @Body() dto: UpdateAddressDto,
-  ) {
-    return this.userService.updateAddress(user.id, id, dto);
-  }
-
-  @Delete('me/addresses/:id')
-  @UseGuards(AuthGuard('jwt'))
-  @DeleteAddressDocs
-  deleteAddress(
-    @CurrentUser() user: UserWithoutPassword,
-    @Param('id') id: string,
-  ) {
-    return this.userService.deleteAddress(user.id, id);
-  }
-
-  @Patch('me/addresses/:id/default')
-  @UseGuards(AuthGuard('jwt'))
-  @SetDefaultAddressDocs
-  setDefaultAddress(
-    @CurrentUser() user: UserWithoutPassword,
-    @Param('id') id: string,
-  ) {
-    return this.userService.setDefaultAddress(user.id, id);
   }
 
   // ── Orders ─────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ services:
     container_name: kyung-redis
     restart: unless-stopped
     ports:
+      # Host port: set REDIS_PORT in .env (default 6379). Use 6380 if 6379 is already allocated.
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
@@ -23,6 +24,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kyung_secret}
       POSTGRES_DB: ${POSTGRES_DB:-kyung_db}
     ports:
+      # Host port: set POSTGRES_PORT in .env (default 5432). Use 5433 if 5432 is already allocated.
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data

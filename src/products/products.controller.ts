@@ -1,7 +1,40 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Gender } from '@prisma/client';
+import { AuthGuard } from '@nestjs/passport';
 import { ProductsService } from './products.service';
+import {
+  AdjustInventoryDto,
+  CreateProductDto,
+  ListProductsQueryDto,
+  ListProductsStaffQueryDto,
+  SetProductImagesDto,
+  UpdateProductDto,
+} from './dto';
+import {
+  ListProductsDocs,
+  GetProductBySlugDocs,
+  GetProductByIdDocs,
+  ListProductsFlatStaffDocs,
+  GetProductStaffByIdDocs,
+  CreateProductDocs,
+  UpdateProductDocs,
+  SetProductImagesDocs,
+  AdjustInventoryDocs,
+  DeleteProductDocs,
+} from './docs';
+import { RolesGuard } from '@auth/guards/roles.guard';
+import { Roles } from '@auth/decorators/roles.decorator';
+import { RoleGroups } from '@auth/roles';
 
 @ApiTags('products')
 @Controller({ path: 'products', version: '1' })
@@ -9,36 +42,76 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Get()
-  getProducts(
-    @Query('page') page = '1',
-    @Query('limit') limit = '24',
-    @Query('search') search?: string,
-    @Query('categoryId') categoryId?: string,
-    @Query('subcategoryId') subcategoryId?: string,
-    @Query('gender') gender?: Gender,
-    @Query('featured') featured?: string,
-    @Query('minPrice') minPrice?: string,
-    @Query('maxPrice') maxPrice?: string,
-    @Query('inStock') inStock?: string,
-    @Query('sortBy') sortBy?: 'newest' | 'price_asc' | 'price_desc',
-  ) {
-    return this.productsService.getProducts({
-      page: +page,
-      limit: +limit,
-      search,
-      categoryId,
-      subcategoryId,
-      gender,
-      featured: featured === 'true',
-      minPrice: minPrice ? +minPrice : undefined,
-      maxPrice: maxPrice ? +maxPrice : undefined,
-      inStock: inStock === 'true',
-      sortBy,
-    });
+  @ListProductsDocs
+  list(@Query() query: ListProductsQueryDto) {
+    return this.productsService.getProducts(query);
   }
 
-  @Get('categories')
-  getCategories() {
-    return this.productsService.getCategories();
+  @Get('flat')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.STAFF)
+  @ListProductsFlatStaffDocs
+  listFlat(@Query() query: ListProductsStaffQueryDto) {
+    return this.productsService.listFlatForStaff(query);
+  }
+
+  @Get('slug/:slug')
+  @GetProductBySlugDocs
+  getBySlug(@Param('slug') slug: string) {
+    return this.productsService.getProductBySlugPublic(slug);
+  }
+
+  @Get('staff/:id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.STAFF)
+  @GetProductStaffByIdDocs
+  getStaffById(@Param('id') id: string) {
+    return this.productsService.getProductStaffById(id);
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @CreateProductDocs
+  create(@Body() dto: CreateProductDto) {
+    return this.productsService.createProduct(dto);
+  }
+
+  @Patch(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @UpdateProductDocs
+  update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
+    return this.productsService.updateProduct(id, dto);
+  }
+
+  @Patch(':id/images')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @SetProductImagesDocs
+  setImages(@Param('id') id: string, @Body() dto: SetProductImagesDto) {
+    return this.productsService.setProductImages(id, dto);
+  }
+
+  @Patch(':id/inventory')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @AdjustInventoryDocs
+  adjustInventory(@Param('id') id: string, @Body() dto: AdjustInventoryDto) {
+    return this.productsService.adjustInventory(id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @DeleteProductDocs
+  remove(@Param('id') id: string) {
+    return this.productsService.deleteProduct(id);
+  }
+
+  @Get(':id')
+  @GetProductByIdDocs
+  getById(@Param('id') id: string) {
+    return this.productsService.getProductByIdPublic(id);
   }
 }

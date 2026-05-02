@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
-import { OrderEventsProducer, ORDER_EVENTS_QUEUE } from './orders.queue';
-import { OrderEventsProcessor } from './orders.processor';
+import { OrdersController } from './orders.controller';
+import { OrdersService } from './orders.service';
+import { AuthModule } from '@auth/auth.module';
+import { RolesGuard } from '@auth/guards/roles.guard';
 
 @Module({
-  imports: [
-    BullModule.registerQueue({ name: ORDER_EVENTS_QUEUE }),
-  ],
-  providers: [OrderEventsProducer, OrderEventsProcessor],
-  exports: [OrderEventsProducer],
+  imports: [AuthModule],
+  controllers: [OrdersController],
+  providers: [OrdersService, RolesGuard],
+  exports: [OrdersService],
 })
 export class OrdersModule {}

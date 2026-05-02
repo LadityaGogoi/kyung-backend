@@ -6,8 +6,8 @@ export class UserDetailDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty()
-  email: string;
+  @ApiPropertyOptional({ nullable: true })
+  email: string | null;
 
   @ApiPropertyOptional()
   name: string | null;
@@ -23,6 +23,9 @@ export class UserDetailDto {
 
   @ApiProperty()
   emailVerified: boolean;
+
+  @ApiProperty()
+  phoneVerified: boolean;
 
   @ApiProperty()
   createdAt: Date;
