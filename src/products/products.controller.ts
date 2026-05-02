@@ -1,12 +1,16 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
+import { CategoryService } from '../category/category.service';
 import { ProductsService } from './products.service';
 
 @ApiTags('products')
 @Controller({ path: 'products', version: '1' })
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly categoryService: CategoryService,
+  ) {}
 
   @Get()
   getProducts(
@@ -39,6 +43,6 @@ export class ProductsController {
 
   @Get('categories')
   getCategories() {
-    return this.productsService.getCategories();
+    return this.categoryService.getCategoryTree();
   }
 }

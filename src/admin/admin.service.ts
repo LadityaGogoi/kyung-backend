@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
 import { can } from '@auth/roles';
+import { CategoryService } from '../category/category.service';
 import { ProductsService } from '../products/products.service';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
+    private readonly categoryService: CategoryService,
   ) {}
 
   // ── Users ──────────────────────────────────────────────────────────────────
@@ -326,11 +328,7 @@ export class AdminService {
   // ── Categories ─────────────────────────────────────────────────────────────
 
   async getCategories() {
-    return this.prisma.category.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, parentId: true },
-      orderBy: { name: 'asc' },
-    });
+    return this.categoryService.listFlatForAdmin();
   }
 
   // ── Products ───────────────────────────────────────────────────────────────
