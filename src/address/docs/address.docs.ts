@@ -1,6 +1,14 @@
 import { applyDecorators } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiCreatedResponse, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
-import { AddressListResponseDto, AddressResponseDto, UserErrorResponseDto } from '../response';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+} from '@nestjs/swagger';
+import { AddressListResponseDto, AddressResponseDto } from '../response';
+import { UserErrorResponseDto } from '../../user/response/error.response';
 import { MessageResponse } from '@utils';
 
 export const GetAddressesDocs = applyDecorators(
