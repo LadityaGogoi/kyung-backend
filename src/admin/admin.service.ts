@@ -7,14 +7,12 @@ import {
 import {
   AdminRequestStatus,
   AdminRequestType,
-  Gender,
   OrderStatus,
   Prisma,
   UserRole,
 } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
 import { can } from '@auth/roles';
-import { CategoryService } from '../category/category.service';
 import { ProductsService } from '../products/products.service';
 
 @Injectable()
@@ -22,7 +20,6 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
-    private readonly categoryService: CategoryService,
   ) {}
 
   // ── Users ──────────────────────────────────────────────────────────────────
@@ -324,113 +321,6 @@ export class AdminService {
 
     return { message: { title: 'Success', subTitle: `Request ${status.toLowerCase()}` }, request: updated };
   }
-
-  // ── Categories ─────────────────────────────────────────────────────────────
-
-  async getCategories() {
-    return this.categoryService.listFlatForAdmin();
-  }
-
-  // ── Products ───────────────────────────────────────────────────────────────
-
-  async getProducts(page: number, limit: number, search?: string) {
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { sku: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
-
-    const [products, total] = await Promise.all([
-      this.prisma.product.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          category: { select: { id: true, name: true } },
-          subcategory: { select: { id: true, name: true } },
-          images: { take: 1, orderBy: { sortOrder: 'asc' } },
-        },
-      }),
-      this.prisma.product.count({ where }),
-    ]);
-
-    return { products, total, page, limit };
-  }
-
-  async getProduct(id: string) {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
-      include: {
-        category: true,
-        subcategory: true,
-        images: { orderBy: { sortOrder: 'asc' } },
-        _count: { select: { reviews: true, orderItems: true } },
-      },
-    });
-    if (!product) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
-    return product;
-  }
-
-  async createProduct(dto: {
-    name: string; slug: string; description?: string;
-    price: number; compareAtPrice?: number; costPerItem?: number;
-    sku?: string; barcode?: string;
-    trackInventory?: boolean; stockQuantity?: number; lowStockThreshold?: number;
-    weight?: number; categoryId?: string; subcategoryId?: string;
-    gender?: Gender; colour?: string;
-    isActive?: boolean; isFeatured?: boolean;
-  }) {
-    const product = await this.prisma.product.create({ data: dto as any });
-    await this.productsService.invalidateProductCache();
-    return { message: { title: 'Success', subTitle: 'Product created' }, product };
-  }
-
-  async updateProduct(id: string, dto: Partial<{
-    name: string; slug: string; description: string;
-    price: number; compareAtPrice: number; costPerItem: number;
-    sku: string; barcode: string; trackInventory: boolean;
-    stockQuantity: number; lowStockThreshold: number; weight: number;
-    categoryId: string; subcategoryId: string; gender: Gender; colour: string;
-    isActive: boolean; isFeatured: boolean;
-  }>) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
-
-    const product = await this.prisma.product.update({ where: { id }, data: dto as any });
-    await this.productsService.invalidateProductCache();
-    return { message: { title: 'Success', subTitle: 'Product updated' }, product };
-  }
-
-  async setProductImages(id: string, images: { url: string; publicId: string; alt?: string }[]) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
-
-    await this.prisma.$transaction([
-      this.prisma.productImage.deleteMany({ where: { productId: id } }),
-      ...images.map((img, i) =>
-        this.prisma.productImage.create({
-          data: { productId: id, url: img.url, publicId: img.publicId, alt: img.alt, sortOrder: i },
-        }),
-      ),
-    ]);
-
-    await this.productsService.invalidateProductCache();
-    return { message: { title: 'Success', subTitle: 'Images updated' } };
-  }
-
-  async deleteProduct(id: string) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException({ message: { title: 'Not Found', subTitle: 'Product not found' } });
-    await this.prisma.product.delete({ where: { id } });
-    await this.productsService.invalidateProductCache();
-    return { message: { title: 'Success', subTitle: 'Product deleted' } };
-  }
-
-  // ── Orders ─────────────────────────────────────────────────────────────────
 
   async getOrders(page: number, limit: number, status?: OrderStatus) {
     const where = status ? { status } : {};
