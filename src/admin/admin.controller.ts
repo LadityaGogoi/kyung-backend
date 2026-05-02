@@ -10,9 +10,6 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { CreateProductDto } from './dto/create-product.dto';
-import { UpdateProductDto } from './dto/update-product.dto';
-import { SetProductImagesDto } from './dto/set-product-images.dto';
 import { CreateAdminRequestDto } from './dto/create-admin-request.dto';
 import { ResolveAdminRequestDto } from './dto/resolve-admin-request.dto';
 import { RolesGuard } from '@auth/guards/roles.guard';
@@ -108,55 +105,6 @@ export class AdminController {
   ) {
     return this.adminService.resolveAdminRequest(actor.id, actor.role, id, dto.status as 'APPROVED' | 'REJECTED');
   }
-
-  // ── Categories ─────────────────────────────────────────────────────────────
-
-  @Get('products/categories')
-  getCategories() {
-    return this.adminService.getCategories();
-  }
-
-  // ── Products ───────────────────────────────────────────────────────────────
-
-  @Get('products')
-  getProducts(
-    @Query('page') page = '1',
-    @Query('limit') limit = '20',
-    @Query('search') search?: string,
-  ) {
-    return this.adminService.getProducts(+page, +limit, search);
-  }
-
-  @Get('products/:id')
-  getProduct(@Param('id') id: string) {
-    return this.adminService.getProduct(id);
-  }
-
-  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
-  @Post('products')
-  createProduct(@Body() dto: CreateProductDto) {
-    return this.adminService.createProduct(dto);
-  }
-
-  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
-  @Patch('products/:id')
-  updateProduct(@Param('id') id: string, @Body() dto: UpdateProductDto) {
-    return this.adminService.updateProduct(id, dto);
-  }
-
-  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
-  @Patch('products/:id/images')
-  setProductImages(@Param('id') id: string, @Body() dto: SetProductImagesDto) {
-    return this.adminService.setProductImages(id, dto.images);
-  }
-
-  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
-  @Delete('products/:id')
-  deleteProduct(@Param('id') id: string) {
-    return this.adminService.deleteProduct(id);
-  }
-
-  // ── Orders ─────────────────────────────────────────────────────────────────
 
   @Get('orders')
   getOrders(

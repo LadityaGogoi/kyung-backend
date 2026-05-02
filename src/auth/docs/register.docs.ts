@@ -20,7 +20,7 @@ export const RegisterDocs = applyDecorators(
   }),
   ApiResponse({
     status: 409,
-    description: 'Email already registered',
+    description: 'Phone or email already registered',
     type: AuthErrorResponseDto,
   }),
   ApiResponse({

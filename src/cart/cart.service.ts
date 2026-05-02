@@ -1,10 +1,27 @@
 import { Injectable, Inject } from '@nestjs/common';
 import type Redis from 'ioredis';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
 import { REDIS_CLIENT } from '@redis/redis.module';
 import { UpsertCartItemDto } from './dto';
 
 const GUEST_CART_TTL = 60 * 60 * 24 * 7; // 7 days
+
+const cartItemInclude = {
+  product: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      price: true,
+      images: {
+        select: { id: true, url: true, alt: true },
+        orderBy: { sortOrder: 'asc' as const },
+        take: 1,
+      },
+    },
+  },
+} satisfies Prisma.CartItemInclude;
 
 @Injectable()
 export class CartService {
@@ -46,17 +63,11 @@ export class CartService {
   async getUserCart(userId: string) {
     const cart = await this.prisma.cart.findUnique({
       where: { userId },
-      include: {
-        items: {
-          include: {
-            product: {
-              select: { id: true, name: true, slug: true, price: true, images: { take: 1 } },
-            },
-          },
-        },
-      },
+      include: { items: { include: cartItemInclude, orderBy: { createdAt: 'asc' } } },
     });
-    return cart ?? { items: [] };
+
+    if (!cart) return { id: null, items: [] };
+    return this.serializeCart(cart);
   }
 
   async upsertUserCartItem(userId: string, dto: UpsertCartItemDto) {
@@ -109,5 +120,29 @@ export class CartService {
     }
 
     await this.clearGuestCart(sessionId);
+  }
+
+  // ── Serialization ──────────────────────────────────────────────────────────
+
+  private serializeCart(
+    cart: Prisma.CartGetPayload<{ include: { items: { include: typeof cartItemInclude } } }>,
+  ) {
+    return {
+      id: cart.id,
+      items: cart.items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        product: {
+          id: item.product.id,
+          name: item.product.name,
+          slug: item.product.slug,
+          price: Number(item.product.price),
+          images: item.product.images,
+        },
+      })),
+    };
   }
 }
