@@ -8,7 +8,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiOkResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody, ApiOkResponse, ApiResponse } from '@nestjs/swagger';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RoleGroups } from '../auth/roles';
+import { UserErrorResponseDto } from '../user/response/error.response';
 import { memoryStorage } from 'multer';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { UserService } from '../user/user.service';
@@ -67,13 +71,16 @@ export class UploadController {
   // ── Product image ───────────────────────────────────────────────────────────
 
   @Post('product-image')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
   @UseInterceptors(FileInterceptor('file', fileInterceptorOpts))
-  @ApiOperation({ summary: 'Upload a product image' })
+  @ApiOperation({ summary: 'Upload a product image (Cloudinary, staff who can edit catalog)' })
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
   @ApiOkResponse({ type: UploadResponseDto })
+  @ApiResponse({ status: 401, type: UserErrorResponseDto })
+  @ApiResponse({ status: 403, type: UserErrorResponseDto })
   async uploadProductImage(
     @UploadedFile() file: Express.Multer.File,
   ): Promise<UploadResponseDto> {

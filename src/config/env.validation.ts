@@ -31,6 +31,11 @@ export const envValidationSchema = Joi.object({
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
 
+  // Razorpay
+  RAZORPAY_KEY_ID: Joi.string().required(),
+  RAZORPAY_KEY_SECRET: Joi.string().required(),
+  RAZORPAY_WEBHOOK_SECRET: Joi.string().required(),
+
   // Docker Postgres (used by docker-compose, not the app directly)
   POSTGRES_USER: Joi.string().optional(),
   POSTGRES_PASSWORD: Joi.string().optional(),

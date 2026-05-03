@@ -2,16 +2,13 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
-  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
-import type Redis from 'ioredis';
 import { PrismaService } from '@prisma/prisma.service';
 import { UserRole } from '@prisma/client';
-import { REDIS_CLIENT } from '@redis/redis.module';
 import { LoginDto, RegisterDto } from './dto';
 import type { JwtPayload } from '@common/types';
 import type {
@@ -21,8 +18,7 @@ import type {
 } from './response';
 
 const SALT_ROUNDS = 10;
-const REFRESH_TOKEN_EXPIRY_DAYS = 7;
-const REFRESH_TOKEN_EXPIRY_SECONDS = REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60;
+const REFRESH_TOKEN_EXPIRY_DAYS = 90;
 
 @Injectable()
 export class AuthService {
@@ -30,41 +26,49 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   async register(dto: RegisterDto): Promise<RegisterResponseDto> {
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: dto.email.toLowerCase() },
-          { phone: dto.phone },
-        ],
-      },
-      select: { email: true, phone: true },
+    const phoneTaken = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+      select: { id: true },
     });
-    if (existing) {
-      const field = existing.email === dto.email.toLowerCase() ? 'email' : 'phone number';
+    if (phoneTaken) {
       throw new ConflictException({
         message: {
           title: 'Registration Failed',
-          subTitle: `An account with this ${field} already exists`,
+          subTitle: 'An account with this phone number already exists',
         },
       });
+    }
+
+    if (dto.email) {
+      const emailTaken = await this.prisma.user.findUnique({
+        where: { email: dto.email.toLowerCase() },
+        select: { id: true },
+      });
+      if (emailTaken) {
+        throw new ConflictException({
+          message: {
+            title: 'Registration Failed',
+            subTitle: 'An account with this email already exists',
+          },
+        });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email.toLowerCase(),
+        email: dto.email?.toLowerCase() ?? null,
         password: hashedPassword,
         phone: dto.phone,
-        name: dto.name ?? null,
+        name: dto.name,
         role: UserRole.CUSTOMER,
       },
     });
 
-    const tokens = await this.signAndStoreToken(user.id, user.email);
+    const tokens = await this.signAndStoreToken(user.id, user.phone);
     return {
       message: { title: 'Success', subTitle: 'Account created successfully' },
       access_token: tokens.access_token,
@@ -86,7 +90,7 @@ export class AuthService {
       this.throwInvalidCredentials();
     }
 
-    const tokens = await this.signAndStoreToken(user.id, user.email);
+    const tokens = await this.signAndStoreToken(user.id, user.phone);
     return {
       message: { title: 'Success', subTitle: 'Login successful' },
       access_token: tokens.access_token,
@@ -115,34 +119,7 @@ export class AuthService {
       });
     }
 
-    // Check Redis blocklist first (O(1)) before hitting Postgres
-    if (payload.jti) {
-      const blocked = await this.redis.get(`blocklist:jti:${payload.jti}`);
-      if (blocked) {
-        throw new UnauthorizedException({
-          message: {
-            title: 'Authentication Failed',
-            subTitle: 'Refresh token has been revoked',
-          },
-        });
-      }
-    }
-
-    // Check all-device revocation timestamp
-    const revokedAllAt = await this.redis.get(`revoked-all:${payload.sub}`);
-    if (revokedAllAt) {
-      const issuedAt = (payload as any).iat as number | undefined;
-      if (!issuedAt || issuedAt < Number(revokedAllAt)) {
-        throw new UnauthorizedException({
-          message: {
-            title: 'Authentication Failed',
-            subTitle: 'All sessions have been revoked',
-          },
-        });
-      }
-    }
-
-    // Find a stored token that matches
+    // Find a stored token that matches (logout clears all rows for the user)
     const storedTokens = await this.prisma.refreshToken.findMany({
       where: { userId: payload.sub, expiresAt: { gt: new Date() } },
     });
@@ -165,23 +142,8 @@ export class AuthService {
       });
     }
 
-    // Rotate: delete the used token, add its JTI to blocklist
+    // Rotate: remove the used token from the store (replay protection without Redis)
     await this.prisma.refreshToken.delete({ where: { id: matched.id } });
-
-    if (payload.jti) {
-      const remainingTtl = Math.max(
-        0,
-        Math.floor(((payload as any).exp as number) - Date.now() / 1000),
-      );
-      if (remainingTtl > 0) {
-        await this.redis.set(
-          `blocklist:jti:${payload.jti}`,
-          '1',
-          'EX',
-          remainingTtl,
-        );
-      }
-    }
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) {
@@ -193,7 +155,7 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.signAndStoreToken(user.id, user.email);
+    const tokens = await this.signAndStoreToken(user.id, user.phone);
     return {
       message: { title: 'Success', subTitle: 'Tokens refreshed successfully' },
       access_token: tokens.access_token,
@@ -203,22 +165,15 @@ export class AuthService {
   }
 
   async logout(userId: string): Promise<void> {
-    // Write revoked-all timestamp so any token issued before now is rejected
-    await this.redis.set(
-      `revoked-all:${userId}`,
-      String(Math.floor(Date.now() / 1000)),
-      'EX',
-      REFRESH_TOKEN_EXPIRY_SECONDS,
-    );
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
   }
 
   private async signAndStoreToken(
     userId: string,
-    email: string,
+    phone: string,
   ): Promise<{ access_token: string; refresh_token: string }> {
     const jti = randomUUID();
-    const payload: JwtPayload = { sub: userId, email, jti };
+    const refreshPayload: JwtPayload = { sub: userId, phone, jti };
 
     const accessSecret = this.config.get<string>('JWT_ACCESS_SECRET');
     const refreshSecret = this.config.get<string>('JWT_REFRESH_SECRET');
@@ -226,11 +181,11 @@ export class AuthService {
     if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET is not defined');
 
     const access_token = await this.jwt.signAsync(
-      { sub: userId, email },
+      { sub: userId, phone },
       { expiresIn: '6h', secret: accessSecret },
     );
 
-    const refresh_token = await this.jwt.signAsync(payload, {
+    const refresh_token = await this.jwt.signAsync(refreshPayload, {
       expiresIn: `${REFRESH_TOKEN_EXPIRY_DAYS}d`,
       secret: refreshSecret,
     });
