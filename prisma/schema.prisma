@@ -45,6 +45,7 @@ model User {
   adminRequests  AdminRequest[] @relation("RequestedBy")
   approvedRequests AdminRequest[] @relation("ApprovedBy")
   phoneOtps      PhoneOtp[]
+  productLikes   ProductLike[]
 }
 
 /** Pending phone verification OTPs (static code in dev; swap for SMS provider later). */
@@ -131,11 +132,26 @@ model Product {
   isFeatured  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  hashtags      String[]
   images        ProductImage[]
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
   orderItems    OrderItem[]
   reviews       Review[]
+  likes         ProductLike[]
+}
+
+model ProductLike {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@index([userId])
 }
 
 model ProductImage {
@@ -353,6 +369,20 @@ model ReviewImage {
   createdAt DateTime @default(now())
 
   @@index([reviewId])
+}
+
+// ----- Stories -----
+
+model Story {
+  id        String   @id @default(cuid())
+  title     String?
+  imageUrl  String
+  publicId  String
+  linkUrl   String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 // ----- Admin Requests -----

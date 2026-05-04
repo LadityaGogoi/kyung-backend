@@ -31,7 +31,8 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "noEmit": false
+    "noEmit": false,
+    "types": ["jest"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

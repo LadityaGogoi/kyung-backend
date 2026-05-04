@@ -81,4 +81,10 @@ export class ListProductsQueryDto {
   @IsOptional()
   @IsIn(['newest', 'price_asc', 'price_desc'])
   sortBy?: 'newest' | 'price_asc' | 'price_desc';
+
+  @ApiPropertyOptional({ description: 'Filter by a single hashtag (exact match)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  hashtag?: string;
 }

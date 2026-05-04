@@ -35,6 +35,8 @@ import {
 import { RolesGuard } from '@auth/guards/roles.guard';
 import { Roles } from '@auth/decorators/roles.decorator';
 import { RoleGroups } from '@auth/roles';
+import { CurrentUser } from '@auth/decorators/current-user.decorator';
+import type { UserWithoutPassword } from '@common/types';
 
 @ApiTags('products')
 @Controller({ path: 'products', version: '1' })
@@ -53,6 +55,12 @@ export class ProductsController {
   @ListProductsFlatStaffDocs
   listFlat(@Query() query: ListProductsStaffQueryDto) {
     return this.productsService.listFlatForStaff(query);
+  }
+
+  @Get('my-likes')
+  @UseGuards(AuthGuard('jwt'))
+  getMyLikes(@CurrentUser() user: UserWithoutPassword) {
+    return this.productsService.getMyLikedProductIds(user.id);
   }
 
   @Get('slug/:slug')
@@ -113,5 +121,16 @@ export class ProductsController {
   @GetProductByIdDocs
   getById(@Param('id') id: string) {
     return this.productsService.getProductByIdPublic(id);
+  }
+
+  @Post(':id/like')
+  @UseGuards(AuthGuard('jwt'))
+  like(@Param('id') id: string, @CurrentUser() user: UserWithoutPassword) {
+    return this.productsService.toggleLike(id, user.id);
+  }
+
+  @Get(':id/reviews')
+  getReviews(@Param('id') id: string) {
+    return this.productsService.getProductReviews(id);
   }
 }

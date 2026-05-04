@@ -93,6 +93,29 @@ export class UploadController {
     return { url: result.secure_url, publicId: result.public_id };
   }
 
+  // ── Story image ─────────────────────────────────────────────────────────────
+
+  @Post('story-image')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @UseInterceptors(FileInterceptor('file', fileInterceptorOpts))
+  @ApiOperation({ summary: 'Upload a story image' })
+  @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiOkResponse({ type: UploadResponseDto })
+  async uploadStoryImage(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UploadResponseDto> {
+    validateImage(file);
+
+    const result = await this.cloudinary.upload(file, 'kyung/stories', {
+      transformation: [{ width: 1080, height: 1920, crop: 'fill' }],
+    });
+
+    return { url: result.secure_url, publicId: result.public_id };
+  }
+
   // ── Review image ────────────────────────────────────────────────────────────
 
   @Post('review-image')

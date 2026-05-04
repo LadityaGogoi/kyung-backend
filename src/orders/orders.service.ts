@@ -39,6 +39,10 @@ const orderInclude = {
   items: { include: orderItemInclude, orderBy: { createdAt: 'asc' as const } },
   shippingAddress: true,
   billingAddress: true,
+  events: {
+    orderBy: { createdAt: 'asc' as const },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  },
 } satisfies Prisma.OrderInclude;
 
 @Injectable()
@@ -251,6 +255,26 @@ export class OrdersService {
           createdAt: true,
           updatedAt: true,
           _count: { select: { items: true } },
+          items: {
+            select: {
+              id: true,
+              productName: true,
+              productSku: true,
+              quantity: true,
+              priceAtPurchase: true,
+              product: {
+                select: {
+                  slug: true,
+                  images: {
+                    select: { url: true, alt: true },
+                    orderBy: { sortOrder: 'asc' as const },
+                    take: 1,
+                  },
+                },
+              },
+            },
+            orderBy: { createdAt: 'asc' as const },
+          },
         },
       }),
       this.prisma.order.count({ where }),
@@ -264,6 +288,7 @@ export class OrdersService {
         total: Number(o.total),
         currency: o.currency,
         itemCount: o._count.items,
+        items: o.items.map((i) => ({ ...i, priceAtPurchase: Number(i.priceAtPurchase) })),
         createdAt: o.createdAt,
         updatedAt: o.updatedAt,
       })),
@@ -433,11 +458,12 @@ export class OrdersService {
       });
     }
 
-    if (order.status !== OrderStatus.PENDING) {
+    const cancellableStatuses: OrderStatus[] = [OrderStatus.PENDING, OrderStatus.CONFIRMED];
+    if (!cancellableStatuses.includes(order.status)) {
       throw new BadRequestException({
         message: {
           title: 'Bad Request',
-          subTitle: 'Only PENDING orders can be cancelled by the customer',
+          subTitle: 'Only pending or confirmed orders can be cancelled',
         },
       });
     }
@@ -515,6 +541,13 @@ export class OrdersService {
         priceAtPurchase: Number(item.priceAtPurchase),
         productName: item.productName,
         productSku: item.productSku,
+      })),
+      events: order.events.map((e) => ({
+        id: e.id,
+        type: e.type,
+        payload: e.payload,
+        createdAt: e.createdAt,
+        actor: e.user ? { id: e.user.id, name: e.user.name, email: e.user.email } : null,
       })),
     };
   }
