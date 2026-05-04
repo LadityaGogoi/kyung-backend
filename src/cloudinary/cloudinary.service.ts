@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
 
-export type CloudinaryFolder = 'kyung/avatars' | 'kyung/products' | 'kyung/reviews';
+export type CloudinaryFolder = 'kyung/avatars' | 'kyung/products' | 'kyung/reviews' | 'kyung/stories';
 
 @Injectable()
 export class CloudinaryService {

@@ -48,6 +48,7 @@ export class ProductsService {
       maxPrice: query.maxPrice,
       inStock: query.inStock === true,
       sortBy: query.sortBy ?? 'newest',
+      hashtag: query.hashtag,
     };
 
     const cacheKey = `products:cache:${createHash('md5').update(JSON.stringify(opts)).digest('hex')}`;
@@ -175,6 +176,7 @@ export class ProductsService {
       colour: dto.colour ?? null,
       isActive: dto.isActive ?? true,
       isFeatured: dto.isFeatured ?? false,
+      hashtags: dto.hashtags ?? [],
     };
 
     if (dto.categoryId) data.category = { connect: { id: dto.categoryId } };
@@ -230,6 +232,7 @@ export class ProductsService {
     if (dto.colour !== undefined) data.colour = dto.colour;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.isFeatured !== undefined) data.isFeatured = dto.isFeatured;
+    if (dto.hashtags !== undefined) data.hashtags = dto.hashtags;
 
     if (dto.categoryId !== undefined) {
       data.category = dto.categoryId ? { connect: { id: dto.categoryId } } : { disconnect: true };
@@ -427,6 +430,50 @@ export class ProductsService {
     await this.invalidateProductCache();
   }
 
+  async toggleLike(productId: string, userId: string) {
+    const existing = await this.prisma.productLike.findUnique({
+      where: { userId_productId: { userId, productId } },
+    });
+    if (existing) {
+      await this.prisma.productLike.delete({ where: { id: existing.id } });
+      const count = await this.prisma.productLike.count({ where: { productId } });
+      return { liked: false, likeCount: count };
+    } else {
+      await this.prisma.productLike.create({ data: { userId, productId } });
+      const count = await this.prisma.productLike.count({ where: { productId } });
+      return { liked: true, likeCount: count };
+    }
+  }
+
+  async getMyLikedProductIds(userId: string) {
+    const likes = await this.prisma.productLike.findMany({
+      where: { userId },
+      select: { productId: true },
+    });
+    return { likedProductIds: likes.map(l => l.productId) };
+  }
+
+  async getProductReviews(productId: string) {
+    const reviews = await this.prisma.review.findMany({
+      where: { productId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true, avatarUrl: true } },
+        images: { select: { url: true }, orderBy: { sortOrder: 'asc' } },
+      },
+    });
+    return reviews.map(r => ({
+      id: r.id,
+      rating: r.rating,
+      title: r.title,
+      body: r.body,
+      isVerifiedPurchase: r.isVerifiedPurchase,
+      createdAt: r.createdAt,
+      user: r.user,
+      images: r.images,
+    }));
+  }
+
   private async queryProducts(opts: {
     page: number;
     limit: number;
@@ -439,8 +486,9 @@ export class ProductsService {
     maxPrice?: number;
     inStock?: boolean;
     sortBy: 'newest' | 'price_asc' | 'price_desc';
+    hashtag?: string;
   }) {
-    const { page, limit, search, categoryId, subcategoryId, gender, featured, minPrice, maxPrice, inStock, sortBy } =
+    const { page, limit, search, categoryId, subcategoryId, gender, featured, minPrice, maxPrice, inStock, sortBy, hashtag } =
       opts;
 
     const where: Prisma.ProductWhereInput = { isActive: true };
@@ -450,9 +498,11 @@ export class ProductsService {
         { name: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
         { colour: { contains: search, mode: 'insensitive' } },
+        { hashtags: { has: search } },
       ];
     }
 
+    if (hashtag) where.hashtags = { has: hashtag };
     if (categoryId) where.categoryId = categoryId;
     if (subcategoryId) where.subcategoryId = subcategoryId;
     if (gender) where.gender = gender;
@@ -488,9 +538,11 @@ export class ProductsService {
           isFeatured: true,
           gender: true,
           colour: true,
+          hashtags: true,
           category: { select: { id: true, name: true, slug: true } },
           subcategory: { select: { id: true, name: true, slug: true } },
           images: { orderBy: { sortOrder: 'asc' }, take: 2 },
+          _count: { select: { likes: true } },
         },
       }),
       this.prisma.product.count({ where }),
@@ -515,9 +567,11 @@ export class ProductsService {
       isFeatured: boolean;
       gender: Gender | null;
       colour: string | null;
+      hashtags: string[];
       category: { id: string; name: string; slug: string } | null;
       subcategory: { id: string; name: string; slug: string } | null;
       images: { id: string; url: string; publicId: string; alt: string | null; sortOrder: number }[];
+      _count: { likes: number };
     },
   ) {
     return {
@@ -530,6 +584,8 @@ export class ProductsService {
       isFeatured: p.isFeatured,
       gender: p.gender,
       colour: p.colour,
+      hashtags: p.hashtags,
+      likeCount: p._count.likes,
       category: p.category,
       subcategory: p.subcategory,
       images: p.images.map(i => ({
@@ -564,6 +620,7 @@ export class ProductsService {
       lowStockThreshold: p.lowStockThreshold,
       gender: p.gender,
       colour: p.colour,
+      hashtags: p.hashtags,
       isFeatured: p.isFeatured,
       category: p.category,
       subcategory: p.subcategory,
@@ -642,6 +699,7 @@ export class ProductsService {
     subcategoryId: string | null;
     gender: Gender | null;
     colour: string | null;
+    hashtags: string[];
     isActive: boolean;
     isFeatured: boolean;
     createdAt: Date;
@@ -665,6 +723,7 @@ export class ProductsService {
       subcategoryId: p.subcategoryId,
       gender: p.gender,
       colour: p.colour,
+      hashtags: p.hashtags,
       isActive: p.isActive,
       isFeatured: p.isFeatured,
       createdAt: p.createdAt,

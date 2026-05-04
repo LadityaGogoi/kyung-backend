@@ -10,7 +10,7 @@ import type { UserWithoutPassword } from '@common/types';
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
-@Throttle({ auth: { ttl: 60_000, limit: 10 } })
+@Throttle({ default: { ttl: 60_000, limit: 10 } })
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

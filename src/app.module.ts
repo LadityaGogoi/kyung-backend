@@ -22,6 +22,7 @@ import { CartModule } from './cart/cart.module';
 import { OrdersModule } from './orders/orders.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { PaymentsModule } from './payments/payments.module';
+import { StoryModule } from './story/story.module';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
@@ -45,10 +46,7 @@ import { envValidationSchema } from './config/env.validation';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        throttlers: [
-          { name: 'default', ttl: 60_000, limit: 60 },
-          { name: 'auth', ttl: 60_000, limit: 10 },
-        ],
+        throttlers: [{ name: 'default', ttl: 60_000, limit: 60 }],
         storage: new ThrottlerStorageRedisService(
           new Redis({
             host: config.get<string>('REDIS_HOST', 'localhost'),
@@ -81,6 +79,7 @@ import { envValidationSchema } from './config/env.validation';
     OrdersModule,
     WishlistModule,
     PaymentsModule,
+    StoryModule,
   ],
   controllers: [AppController],
   providers: [

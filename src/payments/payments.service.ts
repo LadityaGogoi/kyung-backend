@@ -6,7 +6,7 @@ import { REDIS_CLIENT } from '@redis/redis.module';
 import * as crypto from 'crypto';
 import Razorpay from 'razorpay';
 import type Redis from 'ioredis';
-import { InitiatePaymentDto, SimulateEventType, SimulateWebhookDto } from './dto';
+import { InitiatePaymentDto, PaymentMethod, SimulateEventType, SimulateWebhookDto } from './dto';
 
 // Redis TTL for the razorpay order id → db order id mapping (24 h)
 const RZP_ORDER_TTL = 60 * 60 * 24;
@@ -56,6 +56,10 @@ export class PaymentsService {
       });
     }
 
+    if (dto.paymentMethod === PaymentMethod.COD) {
+      return this.confirmCod(order.id, order.userId, order.orderNumber);
+    }
+
     // Amount in paise (INR smallest unit)
     const amountPaise = Math.round(Number(order.total) * 100);
 
@@ -70,12 +74,33 @@ export class PaymentsService {
     await this.redis.set(rzpKey(rzpOrder.id), order.id, 'EX', RZP_ORDER_TTL);
 
     return {
+      method: 'RAZORPAY' as const,
       razorpayOrderId: rzpOrder.id,
       amount: amountPaise,
       currency: order.currency,
       key: this.keyId,
       orderNumber: order.orderNumber,
     };
+  }
+
+  private async confirmCod(orderId: string, userId: string, orderNumber: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CONFIRMED },
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId,
+          userId,
+          type: OrderEventType.PAYMENT_CONFIRMED,
+          payload: { method: 'COD' },
+        },
+      });
+    });
+
+    return { method: 'COD' as const, orderNumber };
   }
 
   // ── Dev simulator ─────────────────────────────────────────────────────────

@@ -82,7 +82,12 @@ export class AuthService {
       where: { phone: dto.phone },
     });
     if (!user) {
-      this.throwInvalidCredentials();
+      throw new UnauthorizedException({
+        message: {
+          title: 'Account Not Found',
+          subTitle: 'No account with that phone number. Please register.',
+        },
+      });
     }
 
     const isMatch = await bcrypt.compare(dto.password, user.password);

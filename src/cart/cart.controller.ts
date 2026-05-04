@@ -39,6 +39,7 @@ export class CartController {
 
   @Post('guest')
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
   @UpsertGuestCartItemDocs
   upsertGuestCartItem(
     @Headers('x-guest-session-id') sessionId: string,
@@ -51,6 +52,7 @@ export class CartController {
 
   @Get()
   @UseGuards(AuthGuard('jwt'))
+  @SkipThrottle()
   @GetUserCartDocs
   getUserCart(@CurrentUser() user: UserWithoutPassword) {
     return this.cartService.getUserCart(user.id);
@@ -59,6 +61,7 @@ export class CartController {
   @Post()
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
   @UpsertUserCartItemDocs
   upsertUserCartItem(
     @CurrentUser() user: UserWithoutPassword,
