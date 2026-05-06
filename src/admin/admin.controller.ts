@@ -32,6 +32,11 @@ export class AdminController {
     return this.adminService.getStats();
   }
 
+  @Get('revenue')
+  getRevenue() {
+    return this.adminService.getRevenue();
+  }
+
   // ── Users ──────────────────────────────────────────────────────────────────
 
   @Get('users')

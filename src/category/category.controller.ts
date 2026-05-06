@@ -42,6 +42,13 @@ export class CategoryController {
     return this.categoryService.listFlatForAdmin();
   }
 
+  @Get('admin')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.STAFF)
+  listAllAdmin() {
+    return this.categoryService.listAllForAdmin();
+  }
+
   @Post()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(...RoleGroups.CAN_DIRECT_EDIT)

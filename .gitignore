@@ -64,3 +64,11 @@ prisma/migrations/20260422163935_new_mig/
 .postman/
 
 yarn.lock
+
+.codex/
+.cursor/
+.gemini/
+.mcp.json
+.zed/
+config/
+opencode.json

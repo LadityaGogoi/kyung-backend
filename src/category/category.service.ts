@@ -53,6 +53,23 @@ export class CategoryService {
     });
   }
 
+  /** All categories (including inactive) for the admin categories management tab. */
+  async listAllForAdmin() {
+    return this.prisma.category.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        imageUrl: true,
+        parentId: true,
+        sortOrder: true,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
   async createCategory(dto: CreateCategoryDto) {
     if (dto.parentId) {
       const parent = await this.prisma.category.findUnique({ where: { id: dto.parentId } });

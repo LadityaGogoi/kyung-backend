@@ -450,4 +450,103 @@ export class AdminService {
     };
   }
 
+  // ── Revenue analytics ──────────────────────────────────────────────────────
+
+  async getRevenue() {
+    const activeWhere = { status: { notIn: ['CANCELLED', 'REFUNDED'] as OrderStatus[] } };
+
+    const [summary, byStatus, totalOrders] = await Promise.all([
+      this.prisma.order.aggregate({
+        _sum: { total: true, subtotal: true, tax: true, shippingCost: true, discount: true },
+        _avg: { total: true },
+        _count: { _all: true },
+        where: activeWhere,
+      }),
+      this.prisma.order.groupBy({
+        by: ['status'],
+        _sum: { total: true, subtotal: true },
+        _count: { _all: true },
+      }),
+      this.prisma.order.count(),
+    ]);
+
+    type ProductRow = {
+      productId: string;
+      productName: string;
+      productSku: string | null;
+      revenue: number;
+      unitsSold: number | bigint;
+      orderCount: number | bigint;
+    };
+
+    type MonthRow = {
+      month: Date | string;
+      revenue: number;
+      orders: number | bigint;
+    };
+
+    const [topProducts, monthlyTrend] = await Promise.all([
+      this.prisma.$queryRaw<ProductRow[]>`
+        SELECT
+          oi."productId",
+          oi."productName",
+          oi."productSku",
+          CAST(SUM(oi.quantity * oi."priceAtPurchase") AS DOUBLE PRECISION) AS revenue,
+          SUM(oi.quantity)                                                   AS "unitsSold",
+          COUNT(DISTINCT oi."orderId")                                       AS "orderCount"
+        FROM "OrderItem" oi
+        JOIN "Order" o ON oi."orderId" = o.id
+        WHERE o.status::text NOT IN ('CANCELLED', 'REFUNDED')
+        GROUP BY oi."productId", oi."productName", oi."productSku"
+        ORDER BY revenue DESC
+        LIMIT 20
+      `,
+      this.prisma.$queryRaw<MonthRow[]>`
+        SELECT
+          DATE_TRUNC('month', "createdAt")              AS month,
+          CAST(SUM(total) AS DOUBLE PRECISION)          AS revenue,
+          COUNT(*)                                      AS orders
+        FROM "Order"
+        WHERE status::text NOT IN ('CANCELLED', 'REFUNDED')
+        GROUP BY DATE_TRUNC('month', "createdAt")
+        ORDER BY month DESC
+        LIMIT 12
+      `,
+    ]);
+
+    return {
+      summary: {
+        totalRevenue: Number(summary._sum?.total ?? 0),
+        totalSubtotal: Number(summary._sum?.subtotal ?? 0),
+        totalTax: Number(summary._sum?.tax ?? 0),
+        totalShipping: Number(summary._sum?.shippingCost ?? 0),
+        totalDiscounts: Number(summary._sum?.discount ?? 0),
+        avgOrderValue: Number(summary._avg?.total ?? 0),
+        activeOrderCount: summary._count?._all ?? 0,
+        totalOrders,
+      },
+      byStatus: byStatus.map(r => ({
+        status: r.status,
+        count: r._count._all,
+        total: Number(r._sum.total ?? 0),
+        subtotal: Number(r._sum.subtotal ?? 0),
+      })),
+      topProducts: topProducts.map(p => ({
+        productId: p.productId,
+        productName: p.productName,
+        productSku: p.productSku,
+        revenue: Number(p.revenue),
+        unitsSold: Number(p.unitsSold),
+        orderCount: Number(p.orderCount),
+      })),
+      monthlyTrend: monthlyTrend.map(r => ({
+        month: r.month instanceof Date
+          ? r.month.toISOString().substring(0, 7)
+          : String(r.month).substring(0, 7),
+        revenue: Number(r.revenue),
+        orders: Number(r.orders),
+      })),
+    };
+  }
+
 }
