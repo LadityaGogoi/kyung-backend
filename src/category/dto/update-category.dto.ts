@@ -24,7 +24,7 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsString()
   @MaxLength(2048)
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @ApiPropertyOptional({ description: 'Omit to leave unchanged' })
   @IsOptional()
