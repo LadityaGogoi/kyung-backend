@@ -532,6 +532,7 @@ export class ProductsService {
           id: true,
           name: true,
           slug: true,
+          description: true,
           price: true,
           compareAtPrice: true,
           stockQuantity: true,
@@ -561,6 +562,7 @@ export class ProductsService {
       id: string;
       name: string;
       slug: string;
+      description: string | null;
       price: Prisma.Decimal;
       compareAtPrice: Prisma.Decimal | null;
       stockQuantity: number;
@@ -578,6 +580,7 @@ export class ProductsService {
       id: p.id,
       name: p.name,
       slug: p.slug,
+      description: p.description,
       price: num(p.price)!,
       compareAtPrice: num(p.compareAtPrice),
       stockQuantity: p.stockQuantity,

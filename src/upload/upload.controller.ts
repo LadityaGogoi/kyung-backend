@@ -116,6 +116,29 @@ export class UploadController {
     return { url: result.secure_url, publicId: result.public_id };
   }
 
+  // ── Category image ──────────────────────────────────────────────────────────
+
+  @Post('category-image')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(...RoleGroups.STAFF)
+  @UseInterceptors(FileInterceptor('file', fileInterceptorOpts))
+  @ApiOperation({ summary: 'Upload a category cover image' })
+  @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiOkResponse({ type: UploadResponseDto })
+  async uploadCategoryImage(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UploadResponseDto> {
+    validateImage(file);
+
+    const result = await this.cloudinary.upload(file, 'kyung/categories', {
+      transformation: [{ width: 800, height: 600, crop: 'fill' }],
+    });
+
+    return { url: result.secure_url, publicId: result.public_id };
+  }
+
   // ── Review image ────────────────────────────────────────────────────────────
 
   @Post('review-image')

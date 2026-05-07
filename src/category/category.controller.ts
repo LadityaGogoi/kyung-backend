@@ -59,7 +59,7 @@ export class CategoryController {
 
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(...RoleGroups.CAN_DIRECT_EDIT)
+  @Roles(...RoleGroups.STAFF)
   @UpdateCategoryDocs
   update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
     return this.categoryService.updateCategory(id, dto);
