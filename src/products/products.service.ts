@@ -118,21 +118,33 @@ export class ProductsService {
     return this.serializePublicDetail(product);
   }
 
-  async getProductByIdPublic(id: string) {
-    const product = await this.prisma.product.findFirst({
-      where: { id, isActive: true },
-      include: {
+  async getPopularProductsPublic(limit: number) {
+    const rows = await this.prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: [{ orderItems: { _count: 'desc' } }, { createdAt: 'desc' }],
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        price: true,
+        compareAtPrice: true,
+        stockQuantity: true,
+        isFeatured: true,
+        gender: true,
+        colour: true,
         category: { select: { id: true, name: true, slug: true } },
         subcategory: { select: { id: true, name: true, slug: true } },
-        images: { orderBy: { sortOrder: 'asc' } },
+        images: { orderBy: { sortOrder: 'asc' }, take: 2 },
       },
     });
-    if (!product) {
-      throw new NotFoundException({
-        message: { title: 'Not Found', subTitle: 'Product not found' },
-      });
-    }
-    return this.serializePublicDetail(product);
+
+    return {
+      products: rows.map(p => this.serializeListItem(p)),
+      total: rows.length,
+      page: 1,
+      limit,
+    };
   }
 
   async getProductStaffById(id: string) {

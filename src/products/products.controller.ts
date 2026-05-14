@@ -23,7 +23,6 @@ import {
 import {
   ListProductsDocs,
   GetProductBySlugDocs,
-  GetProductByIdDocs,
   ListProductsFlatStaffDocs,
   GetProductStaffByIdDocs,
   CreateProductDocs,
@@ -55,18 +54,20 @@ export class ProductsController {
     return this.productsService.listFlatForStaff(query);
   }
 
-  @Get('slug/:slug')
-  @GetProductBySlugDocs
-  getBySlug(@Param('slug') slug: string) {
-    return this.productsService.getProductBySlugPublic(slug);
-  }
-
   @Get('staff/:id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(...RoleGroups.STAFF)
   @GetProductStaffByIdDocs
   getStaffById(@Param('id') id: string) {
     return this.productsService.getProductStaffById(id);
+  }
+
+  /** Must stay above `@Get(':slug')` so `popular` is not treated as a product slug. */
+  @Get('popular')
+  getPopular(@Query('limit') raw?: string) {
+    const parsed = raw !== undefined && raw !== '' ? Number.parseInt(raw, 10) : 8;
+    const limit = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 8;
+    return this.productsService.getPopularProductsPublic(limit);
   }
 
   @Post()
@@ -109,9 +110,9 @@ export class ProductsController {
     return this.productsService.deleteProduct(id);
   }
 
-  @Get(':id')
-  @GetProductByIdDocs
-  getById(@Param('id') id: string) {
-    return this.productsService.getProductByIdPublic(id);
+  @Get(':slug')
+  @GetProductBySlugDocs
+  getBySlug(@Param('slug') slug: string) {
+    return this.productsService.getProductBySlugPublic(slug);
   }
 }

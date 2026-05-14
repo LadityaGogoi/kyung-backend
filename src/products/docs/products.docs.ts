@@ -35,13 +35,6 @@ export const GetProductBySlugDocs = applyDecorators(
   ApiResponse({ status: 404, type: UserErrorResponseDto }),
 );
 
-export const GetProductByIdDocs = applyDecorators(
-  ApiOperation({ summary: 'Get active product by id (PDP)' }),
-  ApiParam({ name: 'id', description: 'Product id' }),
-  ApiOkResponse({ description: 'Product detail', type: ProductDetailDto }),
-  ApiResponse({ status: 404, type: UserErrorResponseDto }),
-);
-
 export const ListProductsFlatStaffDocs = applyDecorators(
   ApiOperation({ summary: 'List products for staff (includes inactive)' }),
   ApiBearerAuth('access-token'),
