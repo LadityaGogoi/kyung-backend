@@ -1,11 +1,7 @@
-import { Injectable, Inject } from '@nestjs/common';
-import type Redis from 'ioredis';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
-import { REDIS_CLIENT } from '@redis/redis.module';
 import { UpsertCartItemDto } from './dto';
-
-const GUEST_CART_TTL = 60 * 60 * 24 * 7; // 7 days
 
 const cartItemInclude = {
   product: {
@@ -25,37 +21,40 @@ const cartItemInclude = {
 
 @Injectable()
 export class CartService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  // ── Guest cart (Redis hash) ────────────────────────────────────────────────
-
-  private guestKey(sessionId: string) {
-    return `cart:guest:${sessionId}`;
-  }
+  // ── Guest cart (MongoDB) ───────────────────────────────────────────────────
 
   async getGuestCart(sessionId: string): Promise<Record<string, number>> {
-    const raw = await this.redis.hgetall(this.guestKey(sessionId));
-    return Object.fromEntries(
-      Object.entries(raw).map(([k, v]) => [k, parseInt(v, 10)]),
-    );
+    if (!sessionId) return {};
+    const cart = await this.prisma.guestCart.findUnique({ where: { sessionId } });
+    if (!cart) return {};
+    const items = cart.items as Record<string, number>;
+    return items ?? {};
+  }
+
+  private async saveGuestCart(sessionId: string, items: Record<string, number>) {
+    await this.prisma.guestCart.upsert({
+      where: { sessionId },
+      create: { sessionId, items },
+      update: { items },
+    });
   }
 
   async upsertGuestCartItem(sessionId: string, dto: UpsertCartItemDto) {
-    const key = this.guestKey(sessionId);
+    const items = await this.getGuestCart(sessionId);
     if (dto.quantity === 0) {
-      await this.redis.hdel(key, dto.productId);
+      delete items[dto.productId];
     } else {
-      await this.redis.hset(key, dto.productId, dto.quantity);
-      await this.redis.expire(key, GUEST_CART_TTL);
+      items[dto.productId] = dto.quantity;
     }
-    return this.getGuestCart(sessionId);
+    await this.saveGuestCart(sessionId, items);
+    return items;
   }
 
   async clearGuestCart(sessionId: string) {
-    await this.redis.del(this.guestKey(sessionId));
+    if (!sessionId) return;
+    await this.prisma.guestCart.deleteMany({ where: { sessionId } });
   }
 
   // ── Authenticated cart (Prisma) ────────────────────────────────────────────

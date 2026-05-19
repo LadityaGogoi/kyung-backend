@@ -27,25 +27,8 @@ export const envValidationSchema = Joi.object({
   CORS_ALLOWED_DOMAIN: Joi.string().optional(),
   CORS_ORIGIN: Joi.string().optional(),
 
-  // Redis — set REDIS_URL or REDIS_PRIVATE_URL on Railway; local: REDIS_HOST + REDIS_PORT
-  REDIS_URL: Joi.string().optional(),
-  REDIS_PRIVATE_URL: Joi.string().optional(),
-  REDISHOST: Joi.string().optional(),
-  REDISPORT: Joi.alternatives().try(Joi.number(), Joi.string()).optional(),
-  REDISUSER: Joi.string().optional(),
-  REDISPASSWORD: Joi.string().optional(),
-  REDIS_PASSWORD: Joi.string().optional(),
-  REDIS_HOST: Joi.string().default('localhost'),
-  REDIS_PORT: Joi.number().default(6379),
-
   // Razorpay
   RAZORPAY_KEY_ID: Joi.string().required(),
   RAZORPAY_KEY_SECRET: Joi.string().required(),
   RAZORPAY_WEBHOOK_SECRET: Joi.string().required(),
-
-  // Docker Postgres (used by docker-compose, not the app directly)
-  POSTGRES_USER: Joi.string().optional(),
-  POSTGRES_PASSWORD: Joi.string().optional(),
-  POSTGRES_DB: Joi.string().optional(),
-  POSTGRES_PORT: Joi.number().optional(),
 });

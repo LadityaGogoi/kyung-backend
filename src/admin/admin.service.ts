@@ -316,7 +316,6 @@ export class AdminService {
         req.type === AdminRequestType.EDIT_PRODUCT ||
         req.type === AdminRequestType.DELETE_PRODUCT)
     ) {
-      await this.productsService.invalidateProductCache();
     }
 
     return { message: { title: 'Success', subTitle: `Request ${status.toLowerCase()}` }, request: updated };

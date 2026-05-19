@@ -1,19 +1,2 @@
-services:
-  redis:
-    image: redis:7-alpine
-    container_name: kyung-redis
-    restart: unless-stopped
-    ports:
-      # Host port: set REDIS_PORT in .env (default 6379). Use 6380 if 6379 is already allocated.
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  redis_data:
+# Local dev helpers — MongoDB is on Atlas; no services required for the API by default.
+services: {}

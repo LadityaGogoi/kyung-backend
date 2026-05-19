@@ -1,16 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import type Redis from 'ioredis';
 import { PrismaService } from '@prisma/prisma.service';
-import { REDIS_CLIENT } from '@redis/redis.module';
 import type { UserWithoutPassword } from '@common/types';
 import type { GetUserResponseDto, OrderListResponseDto } from './response';
 import type {
@@ -30,10 +27,7 @@ const STATIC_PHONE_OTP = '9999';
 export class UserService {
   private readonly logger = new Logger(UserService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   // ── OTP ────────────────────────────────────────────────────────────────────
 
@@ -44,8 +38,17 @@ export class UserService {
         throw new ConflictException({ message: { title: 'Conflict', subTitle: 'Email already in use' } });
 
       const code = String(Math.floor(100000 + Math.random() * 900000));
-      const key = `otp:${userId}:${dto.field}`;
-      await this.redis.set(key, JSON.stringify({ code, value: dto.value }), 'EX', OTP_TTL);
+      const expiresAt = new Date(Date.now() + OTP_TTL * 1000);
+      await this.prisma.emailOtp.deleteMany({ where: { userId } });
+      await this.prisma.emailOtp.create({
+        data: {
+          userId,
+          email: dto.value,
+          code,
+          name: dto.name?.trim() || null,
+          expiresAt,
+        },
+      });
 
       this.logger.log(`OTP for user ${userId} (${dto.field} → ${dto.value}): ${code}`);
 
@@ -76,18 +79,20 @@ export class UserService {
 
   async verifyOtp(userId: string, dto: VerifyOtpDto): Promise<GetUserResponseDto> {
     if (dto.field === 'email') {
-      const key = `otp:${userId}:${dto.field}`;
-      const raw = await this.redis.get(key);
+      const record = await this.prisma.emailOtp.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      });
 
-      if (!raw)
+      if (!record || record.expiresAt < new Date()) {
         throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'OTP has expired' } });
+      }
 
-      const entry: { code: string; value: string } = JSON.parse(raw);
-
-      if (entry.value !== dto.value || entry.code !== dto.otp)
+      if (record.email !== dto.value || record.code !== dto.otp) {
         throw new BadRequestException({ message: { title: 'Bad Request', subTitle: 'Invalid OTP' } });
+      }
 
-      await this.redis.del(key);
+      await this.prisma.emailOtp.delete({ where: { id: record.id } });
 
       const data: Record<string, unknown> = {
         email: dto.value,

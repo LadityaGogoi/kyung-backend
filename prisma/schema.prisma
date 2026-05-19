@@ -40,11 +40,11 @@ model User {
   orders         Order[]
   reviews        Review[]
   orderEvents    OrderEvent[]
-  conversations  Conversation[]
   refreshTokens  RefreshToken[]
   adminRequests  AdminRequest[] @relation("RequestedBy")
   approvedRequests AdminRequest[] @relation("ApprovedBy")
   phoneOtps      PhoneOtp[]
+  emailOtps      EmailOtp[]
 }
 
 model PhoneOtp {
@@ -54,6 +54,20 @@ model PhoneOtp {
   phone     String
   code      String
   name      String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model EmailOtp {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  code      String
+  name      String?
+  avatarUrl String?
   expiresAt DateTime
   createdAt DateTime @default(now())
 
@@ -173,6 +187,13 @@ model CartItem {
   @@unique([cartId, productId])
 }
 
+model GuestCart {
+  sessionId String   @id @map("_id")
+  items     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ----- Wishlist -----
 
 model Wishlist {
@@ -225,6 +246,7 @@ model Order {
   billingAddressId   String?
   billingAddress     Address?    @relation("BillingAddress", fields: [billingAddressId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   notes              String?
+  razorpayOrderId    String?     @unique
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -287,38 +309,6 @@ model OrderEvent {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([orderId, createdAt(sort: Desc)])
-}
-
-// ----- Chatbot -----
-
-enum MessageRole {
-  USER
-  ASSISTANT
-}
-
-model Conversation {
-  id        String    @id @default(cuid()) @map("_id")
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  messages  Message[]
-
-  @@index([userId, updatedAt(sort: Desc)])
-}
-
-model Message {
-  id             String       @id @default(cuid()) @map("_id")
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           MessageRole
-  content        String
-  metadata       Json?
-  createdAt      DateTime     @default(now())
-
-  @@index([conversationId, createdAt])
 }
 
 // ----- Reviews -----

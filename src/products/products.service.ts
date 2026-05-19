@@ -2,14 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  Inject,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'crypto';
 import { Gender, Prisma } from '@prisma/client';
 import { PrismaService } from '@prisma/prisma.service';
-import type Redis from 'ioredis';
-import { REDIS_CLIENT } from '@redis/redis.module';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   AdjustInventoryDto,
@@ -20,8 +16,6 @@ import {
   UpdateProductDto,
 } from './dto';
 
-const PRODUCTS_TTL = 300;
-
 function num(v: number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   return v;
@@ -31,12 +25,11 @@ function num(v: number | null | undefined): number | null {
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly cloudinary: CloudinaryService,
   ) {}
 
   async getProducts(query: ListProductsQueryDto) {
-    const opts = {
+    return this.queryProducts({
       page: query.page ?? 1,
       limit: query.limit ?? 24,
       search: query.search,
@@ -48,20 +41,7 @@ export class ProductsService {
       maxPrice: query.maxPrice,
       inStock: query.inStock === true,
       sortBy: query.sortBy ?? 'newest',
-    };
-
-    const cacheKey = `products:cache:${createHash('md5').update(JSON.stringify(opts)).digest('hex')}`;
-    const cached = await this.redis.get(cacheKey);
-    if (cached) return JSON.parse(cached) as Awaited<ReturnType<typeof this.queryProducts>>;
-
-    const result = await this.queryProducts(opts);
-    await this.redis.set(cacheKey, JSON.stringify(result), 'EX', PRODUCTS_TTL);
-    return result;
-  }
-
-  async invalidateProductCache() {
-    const keys = await this.redis.keys('products:cache:*');
-    if (keys.length > 0) await this.redis.del(...keys);
+    });
   }
 
   async listFlatForStaff(query: ListProductsStaffQueryDto) {
@@ -121,7 +101,7 @@ export class ProductsService {
   async getPopularProductsPublic(limit: number) {
     const rows = await this.prisma.product.findMany({
       where: { isActive: true },
-      orderBy: [{ orderItems: { _count: 'desc' } }, { createdAt: 'desc' }],
+      orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
       take: limit,
       select: {
         id: true,
@@ -197,7 +177,6 @@ export class ProductsService {
         data,
         include: { category: true, subcategory: true, images: true },
       });
-      await this.invalidateProductCache();
       return {
         message: { title: 'Success', subTitle: 'Product created' },
         product: this.serializeEntity(product),
@@ -258,7 +237,6 @@ export class ProductsService {
         data,
         include: { category: true, subcategory: true, images: true },
       });
-      await this.invalidateProductCache();
       return {
         message: { title: 'Success', subTitle: 'Product updated' },
         product: this.serializeEntity(product),
@@ -308,7 +286,6 @@ export class ProductsService {
       }
     }
 
-    await this.invalidateProductCache();
     return { message: { title: 'Success', subTitle: 'Images updated' } };
   }
 
@@ -362,8 +339,6 @@ export class ProductsService {
     }
 
     const updated = await this.prisma.product.update({ where: { id }, data });
-    await this.invalidateProductCache();
-
     return {
       message: { title: 'Success', subTitle: 'Inventory updated' },
       stockQuantity: updated.stockQuantity,
@@ -384,8 +359,6 @@ export class ProductsService {
     }
 
     await this.prisma.product.delete({ where: { id } });
-    await this.invalidateProductCache();
-
     for (const img of existing.images) {
       try {
         await this.cloudinary.delete(img.publicId);
@@ -426,7 +399,6 @@ export class ProductsService {
         },
       });
     }
-    await this.invalidateProductCache();
   }
 
   /** Restore stock after order cancellation (best-effort). */
@@ -436,7 +408,6 @@ export class ProductsService {
       where: { id: productId, trackInventory: true },
       data: { stockQuantity: { increment: quantity } },
     });
-    await this.invalidateProductCache();
   }
 
   private async queryProducts(opts: {
