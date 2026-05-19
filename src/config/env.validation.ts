@@ -27,7 +27,14 @@ export const envValidationSchema = Joi.object({
   CORS_ALLOWED_DOMAIN: Joi.string().optional(),
   CORS_ORIGIN: Joi.string().optional(),
 
-  // Redis
+  // Redis — set REDIS_URL or REDIS_PRIVATE_URL on Railway; local: REDIS_HOST + REDIS_PORT
+  REDIS_URL: Joi.string().optional(),
+  REDIS_PRIVATE_URL: Joi.string().optional(),
+  REDISHOST: Joi.string().optional(),
+  REDISPORT: Joi.alternatives().try(Joi.number(), Joi.string()).optional(),
+  REDISUSER: Joi.string().optional(),
+  REDISPASSWORD: Joi.string().optional(),
+  REDIS_PASSWORD: Joi.string().optional(),
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
 

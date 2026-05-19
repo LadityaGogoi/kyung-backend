@@ -19,6 +19,7 @@ import { OrdersModule } from './orders/orders.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { PaymentsModule } from './payments/payments.module';
 import { envValidationSchema } from './config/env.validation';
+import { resolveRedisOptions } from './redis/redis.config';
 
 @Module({
   imports: [
@@ -41,10 +42,7 @@ import { envValidationSchema } from './config/env.validation';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-        },
+        connection: resolveRedisOptions(config),
       }),
     }),
     RedisModule,
