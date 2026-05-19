@@ -117,15 +117,14 @@ export class OrdersService {
       }
     }
 
-    // Calculate totals using Decimal arithmetic
     const subtotal = cart.items.reduce(
-      (sum, item) => sum.add(item.product.price.mul(item.quantity)),
-      new Prisma.Decimal(0),
+      (sum, item) => sum + item.product.price * item.quantity,
+      0,
     );
-    const shippingCost = new Prisma.Decimal(0); // placeholder — wire up shipping provider here
-    const tax = new Prisma.Decimal(0);           // placeholder — wire up GST/tax engine here
-    const discount = new Prisma.Decimal(0);      // placeholder — wire up coupon system here
-    const total = subtotal.add(shippingCost).add(tax).sub(discount);
+    const shippingCost = 0; // placeholder — wire up shipping provider here
+    const tax = 0;          // placeholder — wire up GST/tax engine here
+    const discount = 0;     // placeholder — wire up coupon system here
+    const total = subtotal + shippingCost + tax - discount;
 
     // Run order creation + stock decrement + cart clear atomically
     let order: Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
@@ -196,7 +195,7 @@ export class OrdersService {
                 orderId: newOrder.id,
                 userId,
                 type: OrderEventType.ORDER_PLACED,
-                payload: { orderNumber, total: total.toNumber() },
+                payload: { orderNumber, total },
               },
             });
 

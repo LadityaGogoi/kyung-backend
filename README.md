@@ -31,23 +31,22 @@
 $ yarn install
 ```
 
-### Database (Prisma + PostgreSQL with Docker)
+### Database (Prisma + MongoDB Atlas)
 
-1. Copy env and start Postgres:
+1. Copy env and set `DATABASE_URL` to your MongoDB connection string (URL-encode special characters in the password).
 
-```bash
-cp .env.example .env
-docker compose up -d
-```
-
-2. Run migrations and generate Prisma client:
+2. Push the schema and generate the Prisma client:
 
 ```bash
-yarn prisma migrate dev --name init
-yarn prisma generate
+yarn db:push
+yarn db:generate
 ```
 
-Use `yarn prisma studio` to open the database GUI.
+Optional: seed categories with `yarn prisma db seed`.
+
+Use `yarn db:studio` to open the database GUI.
+
+Redis for caching/cart guests still runs locally: `docker compose up -d`.
 
 ### API docs (Swagger)
 

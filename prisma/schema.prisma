@@ -1,12 +1,12 @@
 // Kyung Ecommerce - Prisma Schema
-// PostgreSQL with Docker
+// MongoDB (Atlas)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
@@ -22,7 +22,7 @@ enum UserRole {
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   email     String?  @unique
   password  String
   name      String?
@@ -39,17 +39,16 @@ model User {
   wishlist       Wishlist?
   orders         Order[]
   reviews        Review[]
-  orderEvents    OrderEvent[]  // to be used to build the chatbot
-  conversations  Conversation[]  // to be used to build the chatbot
+  orderEvents    OrderEvent[]
+  conversations  Conversation[]
   refreshTokens  RefreshToken[]
   adminRequests  AdminRequest[] @relation("RequestedBy")
   approvedRequests AdminRequest[] @relation("ApprovedBy")
   phoneOtps      PhoneOtp[]
 }
 
-/** Pending phone verification OTPs (static code in dev; swap for SMS provider later). */
 model PhoneOtp {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   phone     String
@@ -62,13 +61,13 @@ model PhoneOtp {
 }
 
 model Address {
-  id         String   @id @default(cuid())
+  id         String   @id @default(cuid()) @map("_id")
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label      String?  // e.g. "Home", "Office"
-  street     String   // house / flat number
-  street2    String?  // locality / area
-  landmark   String?  // nearby landmark
+  label      String?
+  street     String
+  street2    String?
+  landmark   String?
   city       String
   state      String?
   postalCode String
@@ -90,13 +89,13 @@ enum Gender {
 }
 
 model Category {
-  id          String   @id @default(cuid())
+  id          String   @id @default(cuid()) @map("_id")
   name        String
   slug        String   @unique
   description String?
   imageUrl    String?
   parentId    String?
-  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children    Category[] @relation("CategoryHierarchy")
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
@@ -108,23 +107,23 @@ model Category {
 }
 
 model Product {
-  id          String   @id @default(cuid())
+  id          String   @id @default(cuid()) @map("_id")
   name        String
   slug        String   @unique
   description String?
-  price       Decimal  @db.Decimal(10, 2)
-  compareAtPrice Decimal? @db.Decimal(10, 2)
-  costPerItem Decimal? @db.Decimal(10, 2)
+  price       Float
+  compareAtPrice Float?
+  costPerItem Float?
   sku         String?  @unique
   barcode     String?
   trackInventory Boolean @default(true)
   stockQuantity Int    @default(0)
   lowStockThreshold Int @default(0)
-  weight         Decimal? @db.Decimal(10, 2)
+  weight         Float?
   categoryId     String?
-  category       Category? @relation("ProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  category       Category? @relation("ProductCategory", fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subcategoryId  String?
-  subcategory    Category? @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: SetNull)
+  subcategory    Category? @relation("ProductSubcategory", fields: [subcategoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   gender         Gender?
   colour         String?
   isActive    Boolean  @default(true)
@@ -139,11 +138,11 @@ model Product {
 }
 
 model ProductImage {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   url       String
-  publicId  String   // Cloudinary public ID for deletion / transformation
+  publicId  String
   alt       String?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
@@ -152,7 +151,7 @@ model ProductImage {
 // ----- Cart -----
 
 model Cart {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -162,7 +161,7 @@ model Cart {
 }
 
 model CartItem {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   cartId    String
   cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
   productId String
@@ -177,7 +176,7 @@ model CartItem {
 // ----- Wishlist -----
 
 model Wishlist {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -187,7 +186,7 @@ model Wishlist {
 }
 
 model WishlistItem {
-  id         String   @id @default(cuid())
+  id         String   @id @default(cuid()) @map("_id")
   wishlistId String
   wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
   productId  String
@@ -210,21 +209,21 @@ enum OrderStatus {
 }
 
 model Order {
-  id                 String      @id @default(cuid())
-  orderNumber        String      @unique // human-readable e.g. KY-10001
+  id                 String      @id @default(cuid()) @map("_id")
+  orderNumber        String      @unique
   userId             String
-  user               User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user               User        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   status             OrderStatus @default(PENDING)
-  subtotal           Decimal     @db.Decimal(10, 2)
-  shippingCost       Decimal     @default(0) @db.Decimal(10, 2)
-  tax                Decimal     @default(0) @db.Decimal(10, 2)
-  discount           Decimal     @default(0) @db.Decimal(10, 2)
-  total              Decimal     @db.Decimal(10, 2)
+  subtotal           Float
+  shippingCost       Float       @default(0)
+  tax                Float       @default(0)
+  discount           Float       @default(0)
+  total              Float
   currency           String      @default("USD")
   shippingAddressId  String
-  shippingAddress    Address     @relation("ShippingAddress", fields: [shippingAddressId], references: [id], onDelete: Restrict)
+  shippingAddress    Address     @relation("ShippingAddress", fields: [shippingAddressId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   billingAddressId   String?
-  billingAddress     Address?    @relation("BillingAddress", fields: [billingAddressId], references: [id], onDelete: SetNull)
+  billingAddress     Address?    @relation("BillingAddress", fields: [billingAddressId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   notes              String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
@@ -234,14 +233,14 @@ model Order {
 }
 
 model OrderItem {
-  id              String   @id @default(cuid())
+  id              String   @id @default(cuid()) @map("_id")
   orderId         String
   order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId       String
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   quantity        Int
-  priceAtPurchase Decimal  @db.Decimal(10, 2) // snapshot at order time
-  productName     String   // snapshot
+  priceAtPurchase Float
+  productName     String
   productSku      String?
   createdAt       DateTime @default(now())
 
@@ -252,17 +251,17 @@ model OrderItem {
 // ----- Auth -----
 
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique  // bcrypt hash of the raw token
+  tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   @@index([userId])
 }
 
-// ----- Order Events ----- // to be used to build the chatbot
+// ----- Order Events -----
 
 enum OrderEventType {
   ORDER_PLACED
@@ -277,20 +276,20 @@ enum OrderEventType {
 }
 
 model OrderEvent {
-  id        String         @id @default(cuid())
+  id        String         @id @default(cuid()) @map("_id")
   orderId   String
   order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   userId    String
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      OrderEventType
-  payload   Json?          // flexible data: old/new status, amounts, notes, etc.
+  payload   Json?
   createdAt DateTime       @default(now())
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([orderId, createdAt(sort: Desc)])
 }
 
-// ----- Chatbot ----- // to be used to build the chatbot
+// ----- Chatbot -----
 
 enum MessageRole {
   USER
@@ -298,10 +297,10 @@ enum MessageRole {
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
+  id        String    @id @default(cuid()) @map("_id")
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String?   // optional, can be auto-generated from first message
+  title     String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -311,12 +310,12 @@ model Conversation {
 }
 
 model Message {
-  id             String       @id @default(cuid())
+  id             String       @id @default(cuid()) @map("_id")
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           MessageRole
   content        String
-  metadata       Json?        // e.g. model used, token counts, event snapshot IDs
+  metadata       Json?
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
@@ -325,12 +324,12 @@ model Message {
 // ----- Reviews -----
 
 model Review {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  rating    Int      // 1-5
+  rating    Int
   title     String?
   body      String?
   isVerifiedPurchase Boolean @default(false)
@@ -344,11 +343,11 @@ model Review {
 }
 
 model ReviewImage {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   reviewId  String
   review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   url       String
-  publicId  String   // Cloudinary public ID for deletion / transformation
+  publicId  String
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
@@ -375,19 +374,19 @@ enum AdminRequestStatus {
 }
 
 model AdminRequest {
-  id              String             @id @default(cuid())
+  id              String             @id @default(cuid()) @map("_id")
   type            AdminRequestType
   status          AdminRequestStatus @default(PENDING)
   requestedById   String
   requestedBy     User               @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
-  targetUserId    String?            // for ROLE_CHANGE / DELETE_USER
-  targetRole      UserRole?          // for ROLE_CHANGE requests
-  targetProductId String?            // for EDIT_PRODUCT / DELETE_PRODUCT
-  targetOrderId   String?            // for UPDATE_ORDER_STATUS
-  payload         Json?              // edit data: product fields or { status } for orders
+  targetUserId    String?
+  targetRole      UserRole?
+  targetProductId String?
+  targetOrderId   String?
+  payload         Json?
   reason          String?
   approvedById    String?
-  approvedBy      User?              @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedBy      User?              @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   approvedAt      DateTime?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

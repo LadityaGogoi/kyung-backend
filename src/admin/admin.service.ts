@@ -235,7 +235,7 @@ export class AdminService {
     }
 
     const request = await this.prisma.adminRequest.create({
-      data: { type, targetUserId, targetRole, targetProductId, targetOrderId, payload: payload !== undefined ? (payload as Prisma.InputJsonValue) : Prisma.DbNull, reason, requestedById: requesterId },
+      data: { type, targetUserId, targetRole, targetProductId, targetOrderId, payload: payload !== undefined ? (payload as Prisma.InputJsonValue) : null, reason, requestedById: requesterId },
       include: { requestedBy: { select: { id: true, name: true, email: true } } },
     });
 

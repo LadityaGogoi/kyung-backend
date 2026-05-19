@@ -22,9 +22,9 @@ import {
 
 const PRODUCTS_TTL = 300;
 
-function num(v: Prisma.Decimal | null | undefined): number | null {
+function num(v: number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
-  return Number(v);
+  return v;
 }
 
 @Injectable()
@@ -521,8 +521,8 @@ export class ProductsService {
       id: string;
       name: string;
       slug: string;
-      price: Prisma.Decimal;
-      compareAtPrice: Prisma.Decimal | null;
+      price: number;
+      compareAtPrice: number | null;
       stockQuantity: number;
       isFeatured: boolean;
       gender: Gender | null;
@@ -641,15 +641,15 @@ export class ProductsService {
     name: string;
     slug: string;
     description: string | null;
-    price: Prisma.Decimal;
-    compareAtPrice: Prisma.Decimal | null;
-    costPerItem: Prisma.Decimal | null;
+    price: number;
+    compareAtPrice: number | null;
+    costPerItem: number | null;
     sku: string | null;
     barcode: string | null;
     trackInventory: boolean;
     stockQuantity: number;
     lowStockThreshold: number;
-    weight: Prisma.Decimal | null;
+    weight: number | null;
     categoryId: string | null;
     subcategoryId: string | null;
     gender: Gender | null;
