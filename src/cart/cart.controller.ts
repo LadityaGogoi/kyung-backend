@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '@auth/decorators/current-user.decorator';
 import type { UserWithoutPassword } from '@common/types';
 import { CartService } from './cart.service';
@@ -31,7 +30,6 @@ export class CartController {
   // ── Guest endpoints ────────────────────────────────────────────────────────
 
   @Get('guest')
-  @SkipThrottle()
   @GetGuestCartDocs
   getGuestCart(@Headers('x-guest-session-id') sessionId: string) {
     return this.cartService.getGuestCart(sessionId ?? '');

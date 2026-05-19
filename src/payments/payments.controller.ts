@@ -13,7 +13,6 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
-import { SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { CurrentUser } from '@auth/decorators/current-user.decorator';
 import type { UserWithoutPassword } from '@common/types';
@@ -53,7 +52,6 @@ export class PaymentsController {
   }
 
   @Post('webhook')
-  @SkipThrottle()
   @HttpCode(HttpStatus.OK)
   @WebhookDocs
   webhook(
